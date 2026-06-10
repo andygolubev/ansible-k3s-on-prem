@@ -1,0 +1,84 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Verify K3s binary artifact exists
+  ansible.builtin.stat:
+    path: "{{ k3s_binary_src }}"
+  register: k3s_binary_artifact
+
+- name: Fail when K3s binary artifact is missing
+  ansible.builtin.fail:
+    msg: "Missing K3s binary artifact: {{ k3s_binary_src }}"
+  when: not k3s_binary_artifact.stat.exists
+
+- name: Verify K3s install script artifact exists
+  ansible.builtin.stat:
+    path: "{{ k3s_install_script_src }}"
+  register: k3s_install_script_artifact
+
+- name: Fail when K3s install script artifact is missing
+  ansible.builtin.fail:
+    msg: "Missing K3s install script artifact: {{ k3s_install_script_src }}"
+  when: not k3s_install_script_artifact.stat.exists
+
+- name: Verify K3s airgap image artifact exists
+  ansible.builtin.stat:
+    path: "{{ k3s_airgap_images_src }}"
+  register: k3s_airgap_images_artifact
+
+- name: Fail when K3s airgap image artifact is missing
+  ansible.builtin.fail:
+    msg: "Missing K3s airgap image artifact: {{ k3s_airgap_images_src }}"
+  when: not k3s_airgap_images_artifact.stat.exists
+
+- name: Create K3s image directory
+  ansible.builtin.file:
+    path: "{{ k3s_airgap_images_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install K3s binary
+  ansible.builtin.copy:
+    src: "{{ k3s_binary_src }}"
+    dest: "{{ k3s_binary_dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy K3s airgap images
+  ansible.builtin.copy:
+    src: "{{ k3s_airgap_images_src }}"
+    dest: "{{ k3s_airgap_images_dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Copy K3s install script
+  ansible.builtin.copy:
+    src: "{{ k3s_install_script_src }}"
+    dest: "{{ k3s_install_script_dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install K3s single-node server
+  ansible.builtin.command:
+    argv: "{{ [k3s_install_script_dest] + k3s_install_args }}"
+  environment:
+    INSTALL_K3S_SKIP_DOWNLOAD: "true"
+  args:
+    creates: /etc/systemd/system/k3s.service
+
+- name: Wait for K3s node command to succeed
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_dest }}"
+      - kubectl
+      - get
+      - nodes
+  register: k3s_nodes
+  changed_when: false
+  retries: "{{ k3s_ready_retries }}"
+  delay: "{{ k3s_ready_delay }}"
+  until: k3s_nodes.rc == 0

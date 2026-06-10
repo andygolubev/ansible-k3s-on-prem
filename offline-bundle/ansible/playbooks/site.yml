@@ -1,0 +1,6 @@
+---
+- name: Install offline single-node K3s
+  hosts: local_k3s
+  become: true
+  roles:
+    - k3s_offline

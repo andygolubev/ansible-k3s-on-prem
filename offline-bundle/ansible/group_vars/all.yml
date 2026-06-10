@@ -1,0 +1,17 @@
+---
+offline_bundle_root: "{{ inventory_dir | dirname }}"
+k3s_artifact_dir: "{{ offline_bundle_root }}/artifacts/k3s"
+k3s_binary_src: "{{ k3s_artifact_dir }}/k3s"
+k3s_install_script_src: "{{ k3s_artifact_dir }}/install.sh"
+k3s_airgap_images_src: "{{ k3s_artifact_dir }}/k3s-airgap-images-amd64.tar.zst"
+
+k3s_binary_dest: /usr/local/bin/k3s
+k3s_install_script_dest: /tmp/k3s-install.sh
+k3s_airgap_images_dir: /var/lib/rancher/k3s/agent/images
+k3s_airgap_images_dest: "{{ k3s_airgap_images_dir }}/k3s-airgap-images-amd64.tar.zst"
+k3s_install_args:
+  - server
+  - --write-kubeconfig-mode
+  - "644"
+k3s_ready_retries: 20
+k3s_ready_delay: 6
