@@ -22,16 +22,35 @@ cd offline-bundle
 ./scripts/verify-artifacts.sh
 ```
 
-`download-k3s-artifacts.sh` downloads the latest stable K3s release at execution time:
+`download-k3s-artifacts.sh` follows the K3s GitHub releases page and downloads the latest release at execution time. The K3s binary and air-gap image tarball always use the same resolved version:
 
 - `artifacts/k3s/k3s`
 - `artifacts/k3s/install.sh`
 - `artifacts/k3s/k3s-airgap-images-amd64.tar.zst`
 - `artifacts/k3s/VERSION`
 
+The download URL follows the official K3s air-gap form, for example:
+
+```bash
+curl -L -o k3s-airgap-images-amd64.tar.zst \
+  "https://github.com/k3s-io/k3s/releases/download/v1.33.3%2Bk3s1/k3s-airgap-images-amd64.tar.zst"
+```
+
 `download-ansible-debs.sh` downloads Ubuntu 24.04 AMD64 packages for local Ansible execution. The default package set intentionally does not include `openssh-server`.
 
 Both download scripts regenerate `checksums.txt`.
+
+If K3s version resolution fails, rerun with verbose output:
+
+```bash
+VERBOSE=1 ./scripts/download-k3s-artifacts.sh
+```
+
+You can also bypass channel lookup with an explicit version:
+
+```bash
+./scripts/download-k3s-artifacts.sh --k3s-version 'v1.33.3+k3s1'
+```
 
 ## 2. Decide Whether To Commit Artifacts
 
@@ -109,6 +128,8 @@ ansible-playbook -i inventory.ini playbooks/site.yml
 ```
 
 The playbook copies local artifacts into place and runs the installer with `INSTALL_K3S_SKIP_DOWNLOAD=true`.
+
+The `k3s_offline` role also creates `/var/lib/rancher/k3s/agent/images/.cache.json` by default. This enables K3s conditional image imports for supported releases, avoiding re-importing unchanged air-gap image archives on every K3s restart. Set `k3s_enable_conditional_image_import: false` in `ansible/group_vars/all.yml` to disable it.
 
 ## 8. Final Verification
 

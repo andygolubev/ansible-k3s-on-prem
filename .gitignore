@@ -207,10 +207,12 @@ tempCodeRunnerFile.py
 .ansible-home/
 .ansible-tmp/
 
-# Offline bundle payload policy:
-# Keep downloaded K3s binaries/images and Ubuntu .deb packages trackable by default.
-# If prepared artifacts become too large for the repository, exclude them in a
-# follow-up commit and regenerate them with offline-bundle/scripts/*download*.sh.
+# Downloaded offline bundle artifacts.
+offline-bundle/artifacts/debs/**/*.deb
+offline-bundle/artifacts/k3s/k3s
+offline-bundle/artifacts/k3s/install.sh
+offline-bundle/artifacts/k3s/k3s-airgap-images-*.tar*
+offline-bundle/artifacts/k3s/VERSION
 
 # Ruff stuff:
 .ruff_cache/

@@ -9,6 +9,7 @@ k3s_binary_dest: /usr/local/bin/k3s
 k3s_install_script_dest: /tmp/k3s-install.sh
 k3s_airgap_images_dir: /var/lib/rancher/k3s/agent/images
 k3s_airgap_images_dest: "{{ k3s_airgap_images_dir }}/k3s-airgap-images-amd64.tar.zst"
+k3s_enable_conditional_image_import: true
 k3s_install_args:
   - server
   - --write-kubeconfig-mode
