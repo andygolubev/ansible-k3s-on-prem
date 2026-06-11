@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-K3S_DIR="$BUNDLE_DIR/artifacts/k3s"
+PAYLOAD_DIR="$BUNDLE_DIR/payload"
+K3S_DIR="$PAYLOAD_DIR/k3s"
 K3S_LATEST_URL="${K3S_LATEST_URL:-https://github.com/k3s-io/k3s/releases/latest}"
 VERBOSE="${VERBOSE:-0}"
 K3S_VERSION_OVERRIDE=""
@@ -120,8 +121,8 @@ resolve_k3s_version() {
 
 generate_checksums() {
   (
-    cd "$BUNDLE_DIR"
-    find artifacts -type f ! -name .gitkeep -print0 \
+    cd "$PAYLOAD_DIR"
+    find . -type f ! -name checksums.txt -print0 \
       | sort -z \
       | xargs -0 --no-run-if-empty sha256sum > checksums.txt
   )
@@ -155,4 +156,4 @@ printf "%s\n" "$K3S_VERSION" > "$K3S_DIR/VERSION"
 generate_checksums
 
 echo "Downloaded K3s artifacts to $K3S_DIR"
-echo "Updated $BUNDLE_DIR/checksums.txt"
+echo "Updated $PAYLOAD_DIR/checksums.txt"

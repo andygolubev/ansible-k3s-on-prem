@@ -1,6 +1,6 @@
 ---
 offline_bundle_root: "{{ inventory_dir | dirname }}"
-k3s_artifact_dir: "{{ offline_bundle_root }}/artifacts/k3s"
+k3s_artifact_dir: "{{ offline_bundle_root }}/payload/k3s"
 k3s_binary_src: "{{ k3s_artifact_dir }}/k3s"
 k3s_install_script_src: "{{ k3s_artifact_dir }}/install.sh"
 k3s_airgap_images_src: "{{ k3s_artifact_dir }}/k3s-airgap-images-amd64.tar.zst"

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEB_DIR="$BUNDLE_DIR/artifacts/debs/ubuntu-24.04-amd64/ansible-and-deps"
+DEB_DIR="$BUNDLE_DIR/payload/debs/ubuntu-26.04-amd64/ansible-and-deps"
 
 if [[ ! -d "$DEB_DIR" ]]; then
   echo "Missing package directory: $DEB_DIR" >&2

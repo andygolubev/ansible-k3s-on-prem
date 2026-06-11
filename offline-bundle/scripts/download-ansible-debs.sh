@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEB_DIR="$BUNDLE_DIR/artifacts/debs/ubuntu-24.04-amd64/ansible-and-deps"
+PAYLOAD_DIR="$BUNDLE_DIR/payload"
+DEB_DIR="$PAYLOAD_DIR/debs/ubuntu-26.04-amd64/ansible-and-deps"
 
 PACKAGES=(
   ansible
@@ -19,7 +20,7 @@ require_linux_amd64() {
   fi
 }
 
-require_ubuntu_2404() {
+require_ubuntu_2604() {
   if [[ ! -r /etc/os-release ]]; then
     echo "Cannot verify OS: /etc/os-release is missing." >&2
     exit 1
@@ -27,8 +28,8 @@ require_ubuntu_2404() {
 
   # shellcheck disable=SC1091
   . /etc/os-release
-  if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "24.04" ]]; then
-    echo "This script must run on Ubuntu 24.04 AMD64 or a compatible clean environment." >&2
+  if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "26.04" ]]; then
+    echo "This script must run on Ubuntu 26.04 AMD64 or a compatible clean environment." >&2
     exit 1
   fi
 }
@@ -51,15 +52,15 @@ as_root() {
 
 generate_checksums() {
   (
-    cd "$BUNDLE_DIR"
-    find artifacts -type f ! -name .gitkeep -print0 \
+    cd "$PAYLOAD_DIR"
+    find . -type f ! -name checksums.txt -print0 \
       | sort -z \
       | xargs -0 --no-run-if-empty sha256sum > checksums.txt
   )
 }
 
 require_linux_amd64
-require_ubuntu_2404
+require_ubuntu_2604
 require_command apt-cache
 require_command apt-get
 require_command awk
@@ -113,4 +114,4 @@ fi
 generate_checksums
 
 echo "Downloaded Ansible .deb packages to $DEB_DIR"
-echo "Updated $BUNDLE_DIR/checksums.txt"
+echo "Updated $PAYLOAD_DIR/checksums.txt"

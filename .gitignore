@@ -207,12 +207,8 @@ tempCodeRunnerFile.py
 .ansible-home/
 .ansible-tmp/
 
-# Downloaded offline bundle artifacts.
-offline-bundle/artifacts/debs/**/*.deb
-offline-bundle/artifacts/k3s/k3s
-offline-bundle/artifacts/k3s/install.sh
-offline-bundle/artifacts/k3s/k3s-airgap-images-*.tar*
-offline-bundle/artifacts/k3s/VERSION
+# Generated offline bundle payload.
+offline-bundle/payload/
 
 # Ruff stuff:
 .ruff_cache/
