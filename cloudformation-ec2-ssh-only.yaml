@@ -12,11 +12,12 @@ Parameters:
     ConstraintDescription: Must be an IPv4 CIDR block, for example 203.0.113.10/32.
   InstanceType:
     Type: String
-    Default: t3.large
+    Default: t3.micro
     Description: EC2 instance type for the Ubuntu host.
     AllowedValues:
+      - t3.micro
+      - t3.small
       - t3.medium
-      - t3.large
   UbuntuAmiParameter:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id
