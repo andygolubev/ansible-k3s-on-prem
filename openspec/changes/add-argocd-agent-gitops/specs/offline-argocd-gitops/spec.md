@@ -9,7 +9,7 @@ The system SHALL prepare all Argo CD, local registry, local Git mirror, and GitO
 
 #### Scenario: Registry and Git mirror images are included
 - **WHEN** the Argo CD payload is prepared
-- **THEN** the payload includes image archives required to run the local registry and the local Git mirror without target-side downloads
+- **THEN** the payload includes image archives and helper binaries required to populate the local registry without target-side downloads
 
 #### Scenario: Payload checksums include GitOps artifacts
 - **WHEN** artifact preparation completes
@@ -26,6 +26,13 @@ The system SHALL verify Argo CD and GitOps payload artifacts before installation
 - **WHEN** any required Argo CD, registry, Git mirror, or app image archive is absent
 - **THEN** artifact verification fails before installation changes are applied
 
+### Requirement: Offline Target Storage
+The system SHALL provision enough root storage for the offline bundle, imported K3s image content, and locally mirrored GitOps images.
+
+#### Scenario: EC2 root volume supports offline installation
+- **WHEN** a new SSH-only EC2 target stack is deployed with defaults
+- **THEN** the root EBS volume is at least 30 GiB gp3
+
 ### Requirement: Local Registry Bootstrap
 The system SHALL create a local registry on the single-node K3s target and load prepared images into it before installing Argo CD or GitOps-managed apps.
 
@@ -35,7 +42,7 @@ The system SHALL create a local registry on the single-node K3s target and load 
 
 #### Scenario: Prepared images are pushed locally
 - **WHEN** the local registry is reachable
-- **THEN** the bootstrap tags and pushes every required Argo CD, Git mirror, and app image into `localhost:5000`
+- **THEN** the bootstrap pushes every required Argo CD and app image archive into `localhost:5000`
 
 #### Scenario: Registry bootstrap is idempotent
 - **WHEN** the registry bootstrap is rerun
@@ -61,7 +68,7 @@ The system SHALL expose the copied app-of-apps and application repository folder
 
 #### Scenario: Argo CD can read repository URLs
 - **WHEN** Argo CD reconciles the root Application
-- **THEN** the configured repository URLs resolve to the local Git mirror service from inside the cluster
+- **THEN** the configured `git://` repository URLs resolve to the local Git mirror service from inside the cluster
 
 ### Requirement: App-Of-Apps Bootstrap
 The system SHALL provide an app-of-apps root Application that bootstraps child Argo CD Applications from local GitOps sources.

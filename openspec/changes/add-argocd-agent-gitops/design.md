@@ -12,7 +12,7 @@ Argo CD cannot use public Git repositories or public registries from the isolate
 - Install Argo CD offline using manifests rendered to reference only images in the local registry.
 - Add an app-of-apps repository folder that defines an Argo CD root Application and an `agent` child Application.
 - Add a separate repository-like `agent` app folder with a small LangChain chatbot service, Dockerfile, and Kubernetes/Helm deployment manifests.
-- Seed a local read-only Git HTTP mirror from the copied repository folders so Argo CD can reconcile from an in-cluster reachable `repoURL`.
+- Seed a local read-only Git mirror from the copied repository folders so Argo CD can reconcile from an in-cluster reachable `repoURL`.
 
 **Non-Goals:**
 - Installing or operating VLLM. The `agent` app will only reference a configurable local VLLM-compatible endpoint.
@@ -32,8 +32,8 @@ Argo CD cannot use public Git repositories or public registries from the isolate
    - Rationale: this avoids adding Helm as a required target dependency and keeps Argo CD installation deterministic offline.
    - Alternatives considered: installing Argo CD from a Helm chart is viable, but it adds chart download/rendering concerns and still requires image rewriting.
 
-3. Provide a read-only local Git HTTP mirror for Argo CD.
-   - Decision: add a small read-only HTTP component, based on an offline `nginx` image, that serves bare repositories generated from `gitops/app-of-apps/` and `apps/agent/` over dumb HTTP inside the cluster. The root Application points to the app-of-apps mirror, and the agent Application points to the agent mirror.
+3. Provide a read-only local Git mirror for Argo CD.
+   - Decision: run a host-side read-only `git daemon` over bare repositories generated from `gitops/app-of-apps/` and `apps/agent/`, and expose it inside the cluster through a Service and Endpoints. The root Application points to the app-of-apps mirror, and the agent Application points to the agent mirror.
    - Rationale: Argo CD requires a repository source reachable from its repo-server pod; copied host folders alone are not sufficient inside an isolated cluster.
    - Alternatives considered: applying all manifests directly with Ansible would install workloads, but it would bypass GitOps and not exercise Argo CD reconciliation.
 
@@ -49,7 +49,7 @@ Argo CD cannot use public Git repositories or public registries from the isolate
 
 - Local registry availability before Argo CD install -> bootstrap the registry first, wait for it to answer on `localhost:5000/v2/`, and fail early if image push fails.
 - Argo CD image list drift across versions -> pin the Argo CD version and derive image references from downloaded manifests during payload preparation.
-- Git mirror complexity -> keep the mirror read-only and generated from repo folders; document that it is an offline bootstrap mechanism rather than a collaborative Git server.
+- Git mirror complexity -> keep the mirror read-only, generated from repo folders, and exposed with `git://`; document that it is an offline bootstrap mechanism rather than a collaborative Git server.
 - Agent app starts before VLLM exists -> configure replicas to zero by default and document the values to enable it after the VLLM change lands.
 - Langfuse endpoint is absent in isolated environments -> make Langfuse configuration optional and avoid failing startup when credentials are not supplied.
 - Single-node assumptions -> document that `localhost:5000` registry and hostPath-backed Git mirror are for the existing single-node K3s target only.

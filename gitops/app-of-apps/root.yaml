@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: http://git-mirror.gitops.svc.cluster.local/app-of-apps.git
+    repoURL: git://git-mirror.gitops.svc.cluster.local/app-of-apps.git
     targetRevision: HEAD
     path: applications
     directory:
@@ -20,4 +20,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-

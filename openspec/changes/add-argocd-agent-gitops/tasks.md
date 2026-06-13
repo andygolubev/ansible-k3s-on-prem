@@ -16,7 +16,7 @@
 ## 3. Payload Preparation
 
 - [x] 3.1 Add an Argo CD artifact download script that pins the Argo CD version and stores upstream install manifests under `offline-bundle/payload/`.
-- [x] 3.2 Add image discovery or pinned image metadata for Argo CD, registry, nginx Git mirror, and agent images.
+- [x] 3.2 Add image discovery or pinned image metadata for Argo CD, registry, and agent images, plus the offline registry push helper.
 - [x] 3.3 Add preparation logic that saves required images as archives under `offline-bundle/payload/`.
 - [x] 3.4 Add preparation logic that builds or exports the agent image with all Python dependencies on a networked host.
 - [x] 3.5 Extend checksum generation so Argo CD, registry, Git mirror, and agent artifacts are covered by `payload/checksums.txt`.
@@ -26,9 +26,10 @@
 - [x] 4.1 Extend artifact verification to require Argo CD manifests, image archives, GitOps repository content, and image metadata.
 - [x] 4.2 Add Ansible variables for local registry, Argo CD namespace, Git mirror namespace, image archive paths, and app-of-apps settings.
 - [x] 4.3 Add an Ansible role or tasks to import the registry image into K3s/containerd and run a `localhost:5000` registry.
-- [x] 4.4 Add an Ansible role or tasks to tag and push prepared images into `localhost:5000`.
+- [x] 4.4 Add an Ansible role or tasks to push prepared image archives into `localhost:5000`.
 - [x] 4.5 Add an Ansible role or tasks to create bare Git mirrors from the app-of-apps and agent folders.
-- [x] 4.6 Add an Ansible role or tasks to run the read-only nginx Git mirror from the local registry.
+- [x] 4.6 Add an Ansible role or tasks to run a read-only Git daemon mirror and expose it inside the cluster.
+- [x] 4.7 Update the SSH-only EC2 template to default to enough root storage for the offline GitOps payload and imported images.
 
 ## 5. Argo CD Installation
 
@@ -50,5 +51,5 @@
 - [x] 7.1 Run shell syntax checks for all new and modified scripts.
 - [x] 7.2 Run local artifact verification against a prepared payload.
 - [x] 7.3 Run Ansible syntax checks for the updated playbook and roles.
-- [ ] 7.4 Validate on an isolated Ubuntu 26.04 AMD64 target that K3s, local registry, Git mirror, Argo CD, app-of-apps, and the `agent` Application install without internet access.
-- [ ] 7.5 Capture final verification output for nodes, pods, Argo CD Applications, local registry contents, and Git mirror accessibility.
+- [x] 7.4 Validate on an isolated Ubuntu 26.04 AMD64 target that K3s, local registry, Git mirror, Argo CD, app-of-apps, and the `agent` Application install without internet access.
+- [x] 7.5 Capture final verification output for nodes, pods, Argo CD Applications, local registry contents, and Git mirror accessibility.

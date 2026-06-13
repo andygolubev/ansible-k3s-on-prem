@@ -120,7 +120,7 @@ payload/debs/ubuntu-26.04-amd64/ansible-and-deps/
 
 The default package set intentionally does not include `openssh-server`.
 
-`download-argocd-artifacts.sh` downloads a pinned Argo CD install manifest, rewrites image references for `localhost:5000`, builds the `agent` image, and saves all required Argo CD, registry, Git mirror, and agent image archives into:
+`download-argocd-artifacts.sh` downloads a pinned Argo CD install manifest, rewrites image references for `localhost:5000`, downloads the offline `crane` registry push helper, builds the `agent` image, and saves all required Argo CD, registry, and agent image archives into:
 
 ```text
 payload/gitops/
@@ -214,7 +214,7 @@ The playbook copies local payload artifacts into place and runs the installer wi
 
 The `k3s_offline` role also creates `/var/lib/rancher/k3s/agent/images/.cache.json` by default. This enables K3s conditional image imports for supported releases, avoiding re-importing unchanged air-gap image archives on every K3s restart. Set `k3s_enable_conditional_image_import: false` in `ansible/group_vars/all.yml` to disable it.
 
-The `argocd_offline` role then imports prepared image archives, starts a single-node local registry at `localhost:5000`, pushes prepared images into it, creates read-only local Git mirrors from `gitops/app-of-apps/` and `apps/agent/`, applies the local-image Argo CD manifests, and applies the root app-of-apps Application.
+The `argocd_offline` role then imports prepared image archives, starts a single-node local registry at `localhost:5000`, pushes prepared images into it with bundled `crane`, creates read-only local Git mirrors from `gitops/app-of-apps/` and `apps/agent/`, exposes them through a host-side `git daemon` and in-cluster Service, applies the local-image Argo CD manifests, and applies the root app-of-apps Application.
 
 ## Agent App Configuration
 
@@ -233,7 +233,8 @@ When Langfuse settings are empty, tracing is disabled and the app still starts.
 The offline GitOps bootstrap is designed for the current single-node K3s target:
 
 - The registry is exposed as `localhost:5000` on the node and is suitable for local containerd pulls.
-- The Git mirror is read-only and generated from copied source folders during bootstrap.
+- The Git mirror is read-only, generated from copied source folders during bootstrap, and exposed with the `git://` protocol for Argo CD.
+- The target needs enough root disk for the copied payload, imported image content, and registry storage. The included EC2 template defaults to a 30 GiB gp3 root volume.
 - Multi-node registry distribution, persistent Git hosting, and VLLM installation are outside this workflow.
 
 ## Final Verification
@@ -245,6 +246,7 @@ sudo k3s kubectl get nodes -o wide
 sudo k3s kubectl get pods -A -o wide
 sudo k3s kubectl -n argocd get applications
 curl -fsS http://127.0.0.1:5000/v2/
+git ls-remote git://127.0.0.1/app-of-apps.git HEAD
 sudo systemctl status k3s
 ```
 

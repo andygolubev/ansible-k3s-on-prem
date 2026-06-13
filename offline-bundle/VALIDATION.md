@@ -58,7 +58,9 @@ sudo k3s kubectl get nodes -o wide
 sudo k3s kubectl get pods -A -o wide
 sudo k3s kubectl -n argocd get applications
 curl -fsS http://127.0.0.1:5000/v2/
+curl -fsS http://127.0.0.1:5000/v2/_catalog
+git ls-remote git://127.0.0.1/app-of-apps.git HEAD
 sudo systemctl status k3s
 ```
 
-Expected result: Ansible installs from local `.deb` packages, the K3s/Argo CD playbook completes without internet access, the single node is Ready, core `kube-system` pods are Running or Completed, Argo CD pods are Running, the `agent` Application exists, and the local registry responds.
+Expected result: Ansible installs from local `.deb` packages, the K3s/Argo CD playbook completes without internet access, the single node is Ready, core `kube-system` pods are Running or Completed, Argo CD pods are Running, the `agent` Application exists, the local registry responds, and the read-only Git mirror returns refs over `git://`.

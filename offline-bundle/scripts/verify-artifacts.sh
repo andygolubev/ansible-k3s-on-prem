@@ -13,6 +13,8 @@ required_files=(
   "payload/gitops/argocd/install.yaml"
   "payload/gitops/argocd/install-local.yaml"
   "payload/gitops/images/images.tsv"
+  "payload/bin/crane"
+  "payload/bin/crane.version"
   "payload/checksums.txt"
 )
 
@@ -72,6 +74,11 @@ fi
 
 if [[ ! -x "$BUNDLE_DIR/payload/k3s/install.sh" ]]; then
   echo "K3s install script is not executable." >&2
+  exit 1
+fi
+
+if [[ ! -x "$BUNDLE_DIR/payload/bin/crane" ]]; then
+  echo "crane binary is not executable." >&2
   exit 1
 fi
 

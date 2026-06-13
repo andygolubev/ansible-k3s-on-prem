@@ -33,7 +33,9 @@ git_mirror_namespace: gitops
 git_mirror_manifest_dest: /tmp/offline-git-mirror.yaml
 git_mirror_root: /var/lib/offline-gitops/git
 git_mirror_image: localhost:5000/nginx:1.27-alpine
-git_mirror_service_url: http://git-mirror.gitops.svc.cluster.local
+git_mirror_port: 9418
+git_mirror_host: "{{ ansible_facts.default_ipv4.address }}"
+git_mirror_service_url: git://git-mirror.gitops.svc.cluster.local
 gitops_app_of_apps_src: "{{ project_root }}/gitops/app-of-apps"
 gitops_agent_src: "{{ project_root }}/apps/agent"
 gitops_root_application: "{{ gitops_app_of_apps_src }}/root.yaml"

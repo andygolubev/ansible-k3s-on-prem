@@ -8,12 +8,14 @@ PAYLOAD_DIR="$BUNDLE_DIR/payload"
 GITOPS_DIR="$PAYLOAD_DIR/gitops"
 ARGOCD_DIR="$GITOPS_DIR/argocd"
 IMAGES_DIR="$GITOPS_DIR/images"
+BIN_DIR="$PAYLOAD_DIR/bin"
 
 ARGOCD_VERSION=""
 REGISTRY_IMAGE="${REGISTRY_IMAGE:-registry:2}"
 GIT_MIRROR_IMAGE="${GIT_MIRROR_IMAGE:-nginx:1.27-alpine}"
 AGENT_IMAGE="${AGENT_IMAGE:-agent-chatbot:0.1.0}"
 LOCAL_REGISTRY="${LOCAL_REGISTRY:-localhost:5000}"
+CRANE_VERSION="${CRANE_VERSION:-v0.21.6}"
 ARGOCD_LATEST_URL="${ARGOCD_LATEST_URL:-https://github.com/argoproj/argo-cd/releases/latest}"
 
 usage() {
@@ -28,6 +30,7 @@ Environment overrides:
   GIT_MIRROR_IMAGE   default nginx:1.27-alpine
   AGENT_IMAGE        default agent-chatbot:0.1.0
   LOCAL_REGISTRY     default localhost:5000
+  CRANE_VERSION      default v0.21.6
 USAGE
 }
 
@@ -64,8 +67,9 @@ require_command curl
 require_command docker
 require_command python3
 require_command sha256sum
+require_command tar
 
-mkdir -p "$ARGOCD_DIR" "$IMAGES_DIR"
+mkdir -p "$ARGOCD_DIR" "$IMAGES_DIR" "$BIN_DIR"
 
 if [[ -z "$ARGOCD_VERSION" ]]; then
   ARGOCD_VERSION="$(
@@ -127,6 +131,14 @@ archive_image() {
 }
 
 : > "$IMAGES_DIR/images.tsv"
+
+crane_archive="$(mktemp)"
+trap 'rm -f "$crane_archive"' EXIT
+curl -fL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+  -o "$crane_archive"
+tar -xzf "$crane_archive" -C "$BIN_DIR" crane
+chmod 0755 "$BIN_DIR/crane"
+echo "$CRANE_VERSION" > "$BIN_DIR/crane.version"
 
 while IFS= read -r image; do
   if [[ -z "$image" ]]; then

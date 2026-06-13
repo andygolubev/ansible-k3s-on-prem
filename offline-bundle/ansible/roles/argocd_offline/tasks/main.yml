@@ -40,6 +40,16 @@
     msg: "Missing agent source: {{ gitops_agent_src }}"
   when: not agent_source.stat.isdir
 
+- name: Verify crane binary exists
+  ansible.builtin.stat:
+    path: "{{ offline_bundle_root }}/payload/bin/crane"
+  register: crane_binary
+
+- name: Fail when crane binary is missing
+  ansible.builtin.fail:
+    msg: "Missing crane binary: {{ offline_bundle_root }}/payload/bin/crane. Run scripts/download-argocd-artifacts.sh first."
+  when: not crane_binary.stat.executable
+
 - name: Import prepared image archives into K3s containerd
   ansible.builtin.shell: |
     set -euo pipefail
@@ -94,9 +104,8 @@
 - name: Push prepared images into local registry
   ansible.builtin.shell: |
     set -euo pipefail
-    while IFS=$'\t' read -r original local_image _archive; do
-      /usr/local/bin/k3s ctr images tag "$original" "$local_image" >/dev/null 2>&1 || true
-      /usr/local/bin/k3s ctr images push --plain-http "$local_image"
+    while IFS=$'\t' read -r _original local_image archive; do
+      "{{ offline_bundle_root }}/payload/bin/crane" --insecure push "{{ offline_bundle_root }}/${archive}" "$local_image"
     done < "{{ gitops_images_manifest }}"
   args:
     executable: /bin/bash
@@ -135,6 +144,50 @@
     executable: /bin/bash
   changed_when: true
 
+- name: Install Git mirror daemon unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/offline-git-mirror.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Offline read-only Git mirror
+      After=network.target
+
+      [Service]
+      ExecStart=/usr/bin/git daemon --base-path={{ git_mirror_root }} --export-all --reuseaddr --informative-errors --verbose --listen=0.0.0.0 --port={{ git_mirror_port }}
+      Restart=always
+      RestartSec=2
+
+      [Install]
+      WantedBy=multi-user.target
+  register: git_mirror_unit
+
+- name: Reload systemd after Git mirror unit changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: git_mirror_unit.changed
+
+- name: Enable and start Git mirror daemon
+  ansible.builtin.systemd:
+    name: offline-git-mirror.service
+    enabled: true
+    state: restarted
+  when: git_mirror_unit.changed
+
+- name: Ensure Git mirror daemon is running
+  ansible.builtin.systemd:
+    name: offline-git-mirror.service
+    enabled: true
+    state: started
+
+- name: Wait for Git mirror daemon port
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ git_mirror_port }}"
+    timeout: 30
+
 - name: Render Git mirror manifest
   ansible.builtin.template:
     src: git-mirror.yaml.j2
@@ -154,17 +207,30 @@
   changed_when: "'created' in git_mirror_apply.stdout or 'configured' in git_mirror_apply.stdout"
   register: git_mirror_apply
 
-- name: Wait for Git mirror rollout
+- name: Remove legacy Nginx Git mirror resources
   ansible.builtin.command:
     argv:
       - /usr/local/bin/k3s
       - kubectl
       - -n
       - "{{ git_mirror_namespace }}"
-      - rollout
-      - status
+      - delete
       - deployment/git-mirror
-      - --timeout=120s
+      - configmap/git-mirror-nginx
+      - --ignore-not-found=true
+  changed_when: "'deleted' in legacy_git_mirror_cleanup.stdout"
+  register: legacy_git_mirror_cleanup
+
+- name: Verify Git mirror service endpoints
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ git_mirror_namespace }}"
+      - get
+      - endpoints
+      - git-mirror
   changed_when: false
 
 - name: Create Argo CD namespace
@@ -187,9 +253,11 @@
       - -n
       - "{{ argocd_namespace }}"
       - apply
+      - --server-side=true
+      - --force-conflicts
       - -f
       - "{{ argocd_manifest_src }}"
-  changed_when: "'created' in argocd_apply.stdout or 'configured' in argocd_apply.stdout"
+  changed_when: "'created' in argocd_apply.stdout or 'configured' in argocd_apply.stdout or 'serverside-applied' in argocd_apply.stdout"
   register: argocd_apply
 
 - name: Wait for Argo CD workloads

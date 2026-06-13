@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: http://git-mirror.gitops.svc.cluster.local/agent.git
+    repoURL: git://git-mirror.gitops.svc.cluster.local/agent.git
     targetRevision: HEAD
     path: chart
     helm:
@@ -21,4 +21,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-
