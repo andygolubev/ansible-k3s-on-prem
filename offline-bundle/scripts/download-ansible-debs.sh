@@ -106,7 +106,7 @@ echo "Downloading ${#RESOLVED_PACKAGES[@]} packages..."
   apt-get download "${RESOLVED_PACKAGES[@]}"
 )
 
-if ! find "$DEB_DIR" -maxdepth 1 -type f -name '*.deb' | grep -q .; then
+if [[ -z "$(find "$DEB_DIR" -maxdepth 1 -type f -name '*.deb' -print -quit)" ]]; then
   echo "No .deb packages were downloaded to $DEB_DIR" >&2
   exit 1
 fi

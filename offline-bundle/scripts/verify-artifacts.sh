@@ -20,7 +20,7 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-if ! find "$BUNDLE_DIR/payload/debs/ubuntu-26.04-amd64/ansible-and-deps" -maxdepth 1 -type f -name '*.deb' | grep -q .; then
+if [[ -z "$(find "$BUNDLE_DIR/payload/debs/ubuntu-26.04-amd64/ansible-and-deps" -maxdepth 1 -type f -name '*.deb' -print -quit)" ]]; then
   echo "Missing required Ansible .deb packages." >&2
   missing=1
 fi
