@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Ubuntu 26.04 AMD64 EC2 instance in us-east-1 with public SSH access and
+  Ubuntu 26.04 AMD64 EC2 instance with public SSH access and
   security group traffic limited to SSH.
 
 Parameters:
@@ -12,24 +12,17 @@ Parameters:
     ConstraintDescription: Must be an IPv4 CIDR block, for example 203.0.113.10/32.
   InstanceType:
     Type: String
-    Default: t3.micro
+    Default: t3.medium
     Description: EC2 instance type for the Ubuntu host.
     AllowedValues:
       - t3.micro
       - t3.small
       - t3.medium
+      - t3.large
   UbuntuAmiParameter:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id
     Description: Public SSM parameter that resolves to the latest Ubuntu 26.04 AMD64 AMI ID.
-
-Rules:
-  UseUsEast1:
-    Assertions:
-      - Assert: !Equals
-          - !Ref AWS::Region
-          - us-east-1
-        AssertDescription: This stack is intended to be deployed only in us-east-1.
 
 Resources:
   Vpc:
@@ -61,7 +54,7 @@ Resources:
       VpcId: !Ref Vpc
       AvailabilityZone: !Select
         - 0
-        - !GetAZs us-east-1
+        - !GetAZs ""
       CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: true
       Tags:
@@ -121,7 +114,7 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-ssh-only-sg
 
-  UbuntuInstance:
+  UbuntuHost:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: !Ref UbuntuAmiParameter
@@ -140,13 +133,13 @@ Resources:
 Outputs:
   InstanceId:
     Description: EC2 instance ID.
-    Value: !Ref UbuntuInstance
+    Value: !Ref UbuntuHost
   PublicIp:
     Description: Public IPv4 address assigned to the instance.
-    Value: !GetAtt UbuntuInstance.PublicIp
+    Value: !GetAtt UbuntuHost.PublicIp
   PublicDnsName:
     Description: Public DNS name assigned to the instance.
-    Value: !GetAtt UbuntuInstance.PublicDnsName
+    Value: !GetAtt UbuntuHost.PublicDnsName
   KeyPairName:
     Description: EC2 key pair name.
     Value: !Ref InstanceKeyPair
@@ -165,4 +158,4 @@ Outputs:
       - KeyPairId: !GetAtt InstanceKeyPair.KeyPairId
   SshCommand:
     Description: SSH command after retrieving the private key and running chmod 400 on it.
-    Value: !Sub ssh -i ${AWS::StackName}.pem ubuntu@${UbuntuInstance.PublicDnsName}
+    Value: !Sub ssh -i ${AWS::StackName}.pem ubuntu@${UbuntuHost.PublicDnsName}
