@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: offline-bundle
+  description: Install NVIDIA GPU support (driver, container toolkit, device plugin) for offline K3s
+  license: MIT
+  min_ansible_version: "2.20"
+dependencies: []

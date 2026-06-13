@@ -49,6 +49,10 @@ payload/
 
 From the repository root on an internet-connected machine:
 
+The GPU, vLLM, and model download steps require Docker and Python 3 with internet access. These are best run on a networked Linux AMD64 host rather than in Docker (see [Prepare Payload On Linux](#prepare-payload-on-linux)).
+
+The k3s + Ansible deb steps can run inside Docker:
+
 ```bash
 docker run --rm \
   --platform linux/amd64 \
@@ -60,7 +64,6 @@ docker run --rm \
     apt-get install -y curl ca-certificates &&
     ./scripts/download-k3s-artifacts.sh &&
     ./scripts/download-ansible-debs.sh &&
-    ./scripts/download-argocd-artifacts.sh &&
     ./scripts/verify-artifacts.sh &&
     du -sh payload
   '
@@ -88,13 +91,26 @@ docker run --rm \
 
 ## Prepare Payload On Linux
 
-On a networked Ubuntu 26.04 AMD64 host:
+On a networked Ubuntu 26.04 AMD64 host with Docker installed:
 
 ```bash
 cd offline-bundle
+
+# K3s, Ansible debs, Argo CD
 ./scripts/download-k3s-artifacts.sh
 ./scripts/download-ansible-debs.sh
 ./scripts/download-argocd-artifacts.sh
+
+# GPU packages + device plugin (Ubuntu 26.04 + Docker required)
+sudo ./scripts/download-gpu-artifacts.sh
+
+# vLLM image (Docker required, ~20 GB download)
+./scripts/download-vllm-artifacts.sh
+
+# Qwen2.5-7B-Instruct model (~15 GB download)
+./scripts/download-model-artifacts.sh
+
+# Verify everything
 ./scripts/verify-artifacts.sh
 ```
 
@@ -228,14 +244,155 @@ The `apps/agent/chart/values.yaml` file controls the sample LangChain chatbot de
 
 When Langfuse settings are empty, tracing is disabled and the app still starts.
 
+## Storage Layout (g5.2xlarge)
+
+The `g5.2xlarge` instance has two storage devices:
+
+| Device | Type | Size | Purpose |
+|--------|------|------|---------|
+| `/dev/sda1` (root EBS) | Persistent gp3 | 200 GiB | OS, K3s config, persistent data, canonical model copy |
+| `/dev/nvme1n1` (instance store) | **Ephemeral** NVMe | ~450 GiB | Container image cache, model working cache, temp inference data |
+
+**EBS root (persistent):**
+```
+/                        OS, K3s binaries and config
+/var/lib/rancher/k3s/    K3s state (etcd, certificates, containerd metadata)
+/opt/models/             Canonical offline model copy — the source of truth
+```
+
+**NVMe instance store (ephemeral):**
+```
+/mnt/nvme/               NVMe mount point
+/mnt/nvme/containerd/    Large container layer cache (symlinked from K3s path)
+/mnt/nvme/model-cache/   HuggingFace / vLLM model working cache
+```
+
+> **WARNING — DATA LOSS RISK:** The NVMe instance store is ephemeral. Its contents are **permanently lost** when the EC2 instance is stopped, rebooted after a hardware failure, or terminated. Never store your only copy of any data on the NVMe. The canonical model copy must remain on the EBS root volume at `/opt/models/`.
+
+### Preparing the NVMe Instance Store
+
+Run the following on the target before the Ansible playbook (or let the `gpu_offline` role handle it automatically):
+
+```bash
+NVME_DEV=/dev/nvme1n1
+NVME_MOUNT=/mnt/nvme
+
+# Confirm the device exists
+lsblk "$NVME_DEV"
+
+# Format (first use only — this destroys existing data)
+mkfs.ext4 -F "$NVME_DEV"
+
+# Mount
+mkdir -p "$NVME_MOUNT"
+mount "$NVME_DEV" "$NVME_MOUNT"
+
+# Persist across reboots (note: instance store is reformatted on stop/start — this only survives reboot)
+echo "$NVME_DEV  $NVME_MOUNT  ext4  defaults,nofail  0  2" >> /etc/fstab
+```
+
+> **Note:** The `gpu_offline` Ansible role performs this setup automatically and creates the working directories under `/mnt/nvme/`.
+
+## GPU Support (g5.2xlarge / NVIDIA A10G)
+
+The offline bundle includes GPU enablement artifacts downloaded by `download-gpu-artifacts.sh`:
+
+```text
+payload/gpu/
+  debs/nvidia-driver/        NVIDIA driver .deb packages (Ubuntu 26.04 amd64)
+  debs/nvidia-ctk/           NVIDIA container toolkit .deb packages
+  images/                    NVIDIA device plugin image archive (.tar)
+  device-plugin.yaml         NVIDIA device plugin manifest
+  DEVICE_PLUGIN_VERSION      Device plugin version file
+```
+
+The `gpu_offline` Ansible role installs the driver and toolkit from local `.deb` packages (no external apt access), configures the NVIDIA runtime for K3s containerd, deploys the device plugin, and validates that the node can schedule GPU pods.
+
+## vLLM Model Serving
+
+The offline bundle includes vLLM artifacts downloaded by `download-vllm-artifacts.sh` and `download-model-artifacts.sh`:
+
+```text
+payload/vllm/
+  images/                    vLLM image archive (.tar)
+  VLLM_IMAGE                 vLLM image reference file
+payload/models/
+  Qwen2.5-7B-Instruct/       Model weights, tokenizer, config, HF snapshot metadata
+```
+
+Kubernetes manifests are in `offline-bundle/ansible/roles/vllm_offline/files/`:
+
+```text
+namespace.yaml               llm namespace
+deployment.yaml              vLLM Deployment (1 replica, GPU, offline args)
+service.yaml                 ClusterIP Service on port 8000
+servicemonitor.yaml          Optional Prometheus ServiceMonitor
+```
+
+The vLLM server exposes an OpenAI-compatible API on port 8000:
+
+```bash
+# Check served models
+curl http://vllm.llm.svc.cluster.local:8000/v1/models
+
+# Chat completion (run from within the cluster or via kubectl port-forward)
+kubectl -n llm port-forward svc/vllm 8000:8000 &
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen2.5-7B-Instruct",
+    "messages": [{"role": "user", "content": "Hello, what can you do?"}],
+    "max_tokens": 256
+  }'
+```
+
 ## Single-Node Assumptions
 
 The offline GitOps bootstrap is designed for the current single-node K3s target:
 
 - The registry is exposed as `localhost:5000` on the node and is suitable for local containerd pulls.
 - The Git mirror is read-only, generated from copied source folders during bootstrap, and exposed with the `git://` protocol for Argo CD.
-- The target needs enough root disk for the copied payload, imported image content, and registry storage. The included EC2 template defaults to a 30 GiB gp3 root volume.
-- Multi-node registry distribution, persistent Git hosting, and VLLM installation are outside this workflow.
+- The target needs 200 GiB gp3 root EBS for the payload, K3s state, registry storage, and canonical model copy.
+- Multi-node registry distribution, persistent Git hosting, and multi-GPU deployments are outside this workflow.
+
+## Verify No Internet Access Is Required
+
+Before and after installation, confirm the target has no outbound internet access:
+
+```bash
+# Should fail on an isolated target
+curl --max-time 5 https://registry-1.docker.io/v2/ && echo "INTERNET REACHABLE - NOT ISOLATED" || echo "No internet access confirmed"
+curl --max-time 5 https://huggingface.co && echo "HF REACHABLE - NOT ISOLATED" || echo "No HuggingFace access confirmed"
+
+# Monitor for unexpected outbound connections during install
+ss -tnp | grep -v "127.0.0.1\|::1"
+```
+
+During and after the playbook, no image pulls should occur from external registries. All images are loaded from local archives and the vLLM model is read from the local `/opt/models/` path.
+
+## Observability: GPU and vLLM Metrics
+
+If a Prometheus stack is deployed, apply the optional ServiceMonitor:
+
+```bash
+sudo k3s kubectl apply -f /tmp/vllm-servicemonitor.yaml
+```
+
+Key metrics to monitor in Grafana or via `kubectl top`:
+
+| Metric | Source | Alert threshold |
+|--------|--------|----------------|
+| `nvidia_gpu_utilization` | DCGM / node-exporter | <10% for >5 min (idle) |
+| `nvidia_memory_used_bytes` | DCGM / node-exporter | >22 GiB (OOM risk) |
+| `vllm:request_success_total` | vLLM `/metrics` | Track request rate |
+| `vllm:e2e_request_latency_seconds` | vLLM `/metrics` | p99 > 30s (overloaded) |
+| `vllm:num_requests_running` | vLLM `/metrics` | Concurrency level |
+| `kube_pod_container_status_restarts_total` | kube-state-metrics | >0 (crashes) |
+
+Pod OOM kills:
+```bash
+sudo k3s kubectl get events -n llm --field-selector reason=OOMKilling
+```
 
 ## Final Verification
 
@@ -251,3 +408,24 @@ sudo systemctl status k3s
 ```
 
 Expected result: one Ready K3s server node, running core `kube-system` pods, running Argo CD pods, an `agent` Application registered in Argo CD, and a reachable local registry.
+
+For GPU + vLLM additional checks:
+
+```bash
+# GPU on host
+nvidia-smi
+
+# GPU schedulable
+sudo k3s kubectl describe node | grep -A5 "nvidia.com/gpu"
+
+# vLLM running
+sudo k3s kubectl -n llm get pods -o wide
+sudo k3s kubectl -n llm get svc
+
+# vLLM API
+sudo k3s kubectl -n llm port-forward svc/vllm 8000:8000 &
+curl -fsS http://localhost:8000/v1/models
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"ping"}],"max_tokens":16}'
+```

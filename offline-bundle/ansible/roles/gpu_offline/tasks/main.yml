@@ -1,0 +1,340 @@
+#SPDX-License-Identifier: MIT-0
+---
+# ---------------------------------------------------------------------------
+# Preflight: verify GPU payload artifacts exist
+# ---------------------------------------------------------------------------
+- name: Verify NVIDIA driver deb directory exists
+  ansible.builtin.stat:
+    path: "{{ gpu_driver_deb_dir }}"
+  register: gpu_driver_deb_stat
+
+- name: Fail when NVIDIA driver debs are missing
+  ansible.builtin.fail:
+    msg: "Missing NVIDIA driver .deb directory: {{ gpu_driver_deb_dir }}. Run scripts/download-gpu-artifacts.sh first."
+  when: not gpu_driver_deb_stat.stat.exists
+
+- name: Verify NVIDIA container toolkit deb directory exists
+  ansible.builtin.stat:
+    path: "{{ gpu_ctk_deb_dir }}"
+  register: gpu_ctk_deb_stat
+
+- name: Fail when NVIDIA container toolkit debs are missing
+  ansible.builtin.fail:
+    msg: "Missing NVIDIA container toolkit .deb directory: {{ gpu_ctk_deb_dir }}. Run scripts/download-gpu-artifacts.sh first."
+  when: not gpu_ctk_deb_stat.stat.exists
+
+- name: Verify device plugin image archive exists
+  ansible.builtin.stat:
+    path: "{{ gpu_device_plugin_image_archive }}"
+  register: gpu_device_plugin_image_stat
+
+- name: Fail when device plugin image archive is missing
+  ansible.builtin.fail:
+    msg: "Missing device plugin image archive: {{ gpu_device_plugin_image_archive }}. Run scripts/download-gpu-artifacts.sh first."
+  when: not gpu_device_plugin_image_stat.stat.exists
+
+- name: Verify device plugin manifest exists
+  ansible.builtin.stat:
+    path: "{{ gpu_device_plugin_manifest_src }}"
+  register: gpu_device_plugin_manifest_stat
+
+- name: Fail when device plugin manifest is missing
+  ansible.builtin.fail:
+    msg: "Missing device plugin manifest: {{ gpu_device_plugin_manifest_src }}. Run scripts/download-gpu-artifacts.sh first."
+  when: not gpu_device_plugin_manifest_stat.stat.exists
+
+# ---------------------------------------------------------------------------
+# NVMe instance store setup
+# ---------------------------------------------------------------------------
+- name: Check if NVMe instance store device exists
+  ansible.builtin.stat:
+    path: "{{ gpu_nvme_device }}"
+  register: nvme_device_stat
+
+- name: Format NVMe instance store (first use)
+  ansible.builtin.command:
+    argv:
+      - mkfs.ext4
+      - -F
+      - "{{ gpu_nvme_device }}"
+  when: nvme_device_stat.stat.exists
+  # idempotent: -F forces formatting; only runs when the device is present
+  changed_when: true
+
+- name: Create NVMe mount point
+  ansible.builtin.file:
+    path: "{{ gpu_nvme_mount }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: nvme_device_stat.stat.exists
+
+- name: Mount NVMe instance store
+  ansible.posix.mount:
+    path: "{{ gpu_nvme_mount }}"
+    src: "{{ gpu_nvme_device }}"
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted
+  when: nvme_device_stat.stat.exists
+
+- name: Create NVMe model cache directory
+  ansible.builtin.file:
+    path: "{{ gpu_nvme_model_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: nvme_device_stat.stat.exists
+
+# ---------------------------------------------------------------------------
+# Install NVIDIA driver from local .deb packages (no internet access)
+# ---------------------------------------------------------------------------
+- name: Find NVIDIA driver .deb packages
+  ansible.builtin.find:
+    paths: "{{ gpu_driver_deb_dir }}"
+    patterns: "*.deb"
+  register: driver_deb_files
+
+- name: Fail when no NVIDIA driver .deb files found
+  ansible.builtin.fail:
+    msg: "No .deb files found in {{ gpu_driver_deb_dir }}"
+  when: driver_deb_files.files | length == 0
+
+- name: Install NVIDIA driver packages from local .deb files
+  ansible.builtin.shell: |
+    set -euo pipefail
+    dpkg -i {{ gpu_driver_deb_dir }}/*.deb || apt-get install -f -y --no-download
+  args:
+    executable: /bin/bash
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: true
+
+# ---------------------------------------------------------------------------
+# Install NVIDIA container toolkit from local .deb packages
+# ---------------------------------------------------------------------------
+- name: Find NVIDIA container toolkit .deb packages
+  ansible.builtin.find:
+    paths: "{{ gpu_ctk_deb_dir }}"
+    patterns: "*.deb"
+  register: ctk_deb_files
+
+- name: Fail when no NVIDIA container toolkit .deb files found
+  ansible.builtin.fail:
+    msg: "No .deb files found in {{ gpu_ctk_deb_dir }}"
+  when: ctk_deb_files.files | length == 0
+
+- name: Install NVIDIA container toolkit packages from local .deb files
+  ansible.builtin.shell: |
+    set -euo pipefail
+    dpkg -i {{ gpu_ctk_deb_dir }}/*.deb || apt-get install -f -y --no-download
+  args:
+    executable: /bin/bash
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: true
+
+# ---------------------------------------------------------------------------
+# Configure NVIDIA runtime for K3s containerd
+# ---------------------------------------------------------------------------
+- name: Create K3s containerd config directory
+  ansible.builtin.file:
+    path: /var/lib/rancher/k3s/agent/etc/containerd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure NVIDIA runtime in K3s containerd template
+  ansible.builtin.template:
+    src: containerd-nvidia-runtime.toml.j2
+    dest: /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart k3s
+
+- name: Configure nvidia-ctk for containerd runtime
+  ansible.builtin.command:
+    argv:
+      - nvidia-ctk
+      - runtime
+      - configure
+      - --runtime=containerd
+      - --set-as-default
+  changed_when: true
+  notify: Restart k3s
+
+# Flush handlers now so K3s restarts before we proceed with image import and device plugin
+- name: Flush handlers to restart K3s with NVIDIA runtime
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for K3s to be ready after restart
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - get
+      - nodes
+  register: k3s_nodes_after_restart
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: k3s_nodes_after_restart.rc == 0
+
+# ---------------------------------------------------------------------------
+# Load NVIDIA device plugin image into K3s/containerd
+# ---------------------------------------------------------------------------
+- name: Import NVIDIA device plugin image into K3s containerd
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - ctr
+      - images
+      - import
+      - "{{ gpu_device_plugin_image_archive }}"
+  changed_when: true
+
+# ---------------------------------------------------------------------------
+# Apply NVIDIA device plugin manifest
+# ---------------------------------------------------------------------------
+- name: Copy device plugin manifest
+  ansible.builtin.copy:
+    src: "{{ gpu_device_plugin_manifest_src }}"
+    dest: "{{ gpu_device_plugin_manifest_dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply NVIDIA device plugin manifest
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ gpu_device_plugin_manifest_dest }}"
+  changed_when: "'created' in device_plugin_apply.stdout or 'configured' in device_plugin_apply.stdout"
+  register: device_plugin_apply
+
+- name: Wait for NVIDIA device plugin to be ready
+  ansible.builtin.shell: |
+    set -euo pipefail
+    /usr/local/bin/k3s kubectl -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=120s
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+# ---------------------------------------------------------------------------
+# GPU validation
+# ---------------------------------------------------------------------------
+- name: Verify nvidia-smi works on host
+  ansible.builtin.command:
+    argv:
+      - nvidia-smi
+  changed_when: false
+  register: host_nvidia_smi
+  failed_when: host_nvidia_smi.rc != 0
+
+- name: Show nvidia-smi output
+  ansible.builtin.debug:
+    msg: "{{ host_nvidia_smi.stdout_lines }}"
+
+- name: Verify node advertises nvidia.com/gpu capacity
+  ansible.builtin.shell: |
+    /usr/local/bin/k3s kubectl get node -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}'
+  args:
+    executable: /bin/bash
+  register: gpu_allocatable
+  changed_when: false
+  retries: "{{ gpu_validation_retries }}"
+  delay: "{{ gpu_validation_delay }}"
+  until: gpu_allocatable.stdout | trim | int >= 1
+
+- name: Fail when GPU is not allocatable
+  ansible.builtin.fail:
+    msg: "Node does not advertise nvidia.com/gpu allocatable capacity. Got: {{ gpu_allocatable.stdout | trim }}"
+  when: gpu_allocatable.stdout | trim | int < 1
+
+- name: Deploy GPU validation pod
+  ansible.builtin.copy:
+    dest: "{{ gpu_validation_pod_manifest_dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: gpu-validation
+        namespace: kube-system
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: nvidia-smi
+            image: nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04
+            command: ["nvidia-smi"]
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+              requests:
+                nvidia.com/gpu: "1"
+
+- name: Apply GPU validation pod
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ gpu_validation_pod_manifest_dest }}"
+  changed_when: true
+
+- name: Wait for GPU validation pod to complete
+  ansible.builtin.shell: |
+    set -euo pipefail
+    /usr/local/bin/k3s kubectl -n kube-system wait pod/gpu-validation \
+      --for=condition=Ready=false \
+      --timeout=300s
+    phase=$(/usr/local/bin/k3s kubectl -n kube-system get pod/gpu-validation \
+      -o jsonpath='{.status.phase}')
+    if [[ "$phase" != "Succeeded" ]]; then
+      echo "GPU validation pod phase: $phase" >&2
+      /usr/local/bin/k3s kubectl -n kube-system logs gpu-validation || true
+      exit 1
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  retries: "{{ gpu_validation_retries }}"
+  delay: "{{ gpu_validation_delay }}"
+
+- name: Show GPU validation pod logs
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - kube-system
+      - logs
+      - gpu-validation
+  changed_when: false
+  register: gpu_validation_logs
+
+- name: Display GPU validation result
+  ansible.builtin.debug:
+    msg: "{{ gpu_validation_logs.stdout_lines }}"
+
+- name: Clean up GPU validation pod
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - kube-system
+      - delete
+      - pod/gpu-validation
+      - --ignore-not-found=true
+  changed_when: true

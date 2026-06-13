@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Ubuntu 26.04 AMD64 EC2 instance with public SSH access and
-  security group traffic limited to SSH.
+  Ubuntu 26.04 AMD64 EC2 instance (default: g5.2xlarge with NVIDIA A10G GPU)
+  with public SSH access and security group traffic limited to SSH.
 
 Parameters:
   SshCidr:
@@ -12,9 +12,14 @@ Parameters:
     ConstraintDescription: Must be an IPv4 CIDR block, for example 203.0.113.10/32.
   InstanceType:
     Type: String
-    Default: t3.medium
-    Description: EC2 instance type for the Ubuntu host.
+    Default: g5.2xlarge
+    Description: EC2 instance type for the Ubuntu host. g5.2xlarge is the recommended GPU instance (1× NVIDIA A10G, 8 vCPU, 32 GiB RAM, 450 GB NVMe instance store).
     AllowedValues:
+      - g5.xlarge
+      - g5.2xlarge
+      - g5.4xlarge
+      - g5.8xlarge
+      - g5.16xlarge
       - t3.micro
       - t3.small
       - t3.medium
@@ -25,9 +30,9 @@ Parameters:
     Description: Public SSM parameter that resolves to the latest Ubuntu 26.04 AMD64 AMI ID.
   RootVolumeSize:
     Type: Number
-    Default: 30
-    MinValue: 8
-    Description: Root EBS volume size in GiB.
+    Default: 200
+    MinValue: 50
+    Description: Root EBS volume size in GiB. 200 GiB is the recommended minimum for the offline bundle (OS, K3s, models, container images).
 
 Resources:
   Vpc:

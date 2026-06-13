@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: offline-bundle
+  description: Deploy vLLM model serving (offline) on K3s with NVIDIA GPU
+  license: MIT
+  min_ansible_version: "2.20"
+dependencies: []

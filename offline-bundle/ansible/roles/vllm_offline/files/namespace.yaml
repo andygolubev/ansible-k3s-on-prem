@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm
+  labels:
+    app.kubernetes.io/name: llm
+    app.kubernetes.io/managed-by: offline-bundle

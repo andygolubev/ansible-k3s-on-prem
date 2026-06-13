@@ -1,0 +1,201 @@
+#SPDX-License-Identifier: MIT-0
+---
+# ---------------------------------------------------------------------------
+# Preflight: verify vLLM payload artifacts exist
+# ---------------------------------------------------------------------------
+- name: Verify vLLM image archive exists
+  ansible.builtin.stat:
+    path: "{{ vllm_image_archive }}"
+  register: vllm_image_stat
+
+- name: Fail when vLLM image archive is missing
+  ansible.builtin.fail:
+    msg: "Missing vLLM image archive: {{ vllm_image_archive }}. Run scripts/download-vllm-artifacts.sh first."
+  when: not vllm_image_stat.stat.exists
+
+- name: Verify model snapshot exists
+  ansible.builtin.stat:
+    path: "{{ vllm_models_src_dir }}/{{ vllm_model_name }}"
+  register: model_src_stat
+
+- name: Fail when model snapshot is missing
+  ansible.builtin.fail:
+    msg: "Missing model snapshot: {{ vllm_models_src_dir }}/{{ vllm_model_name }}. Run scripts/download-model-artifacts.sh first."
+  when: not model_src_stat.stat.exists
+
+# ---------------------------------------------------------------------------
+# Load vLLM image into K3s containerd
+# ---------------------------------------------------------------------------
+- name: Import vLLM image into K3s containerd
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - ctr
+      - images
+      - import
+      - "{{ vllm_image_archive }}"
+  changed_when: true
+
+# ---------------------------------------------------------------------------
+# Place model files on EBS root (persistent)
+# ---------------------------------------------------------------------------
+- name: Create model destination directory on EBS
+  ansible.builtin.file:
+    path: "{{ vllm_models_dest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy model snapshot to persistent model directory
+  ansible.builtin.copy:
+    src: "{{ vllm_models_src_dir }}/{{ vllm_model_name }}/"
+    dest: "{{ vllm_models_dest_dir }}/{{ vllm_model_name }}"
+    owner: root
+    group: root
+    mode: preserve
+  # This may take several minutes due to model size (~15 GB)
+
+- name: Verify key model files exist after copy
+  ansible.builtin.stat:
+    path: "{{ vllm_models_dest_dir }}/{{ vllm_model_name }}/{{ item }}"
+  register: model_file_stat
+  loop:
+    - config.json
+    - tokenizer_config.json
+  failed_when: not model_file_stat.stat.exists
+
+# ---------------------------------------------------------------------------
+# Apply Kubernetes manifests
+# ---------------------------------------------------------------------------
+- name: Create manifest staging directory
+  ansible.builtin.file:
+    path: "{{ vllm_manifest_dest }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy vLLM Kubernetes manifests
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ vllm_manifest_dest }}/{{ item | basename }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - namespace.yaml
+    - deployment.yaml
+    - service.yaml
+
+- name: Apply vLLM namespace
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ vllm_manifest_dest }}/namespace.yaml"
+  changed_when: "'created' in vllm_ns_apply.stdout or 'configured' in vllm_ns_apply.stdout"
+  register: vllm_ns_apply
+
+- name: Apply vLLM Deployment and Service
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ vllm_manifest_dest }}/deployment.yaml"
+      - -f
+      - "{{ vllm_manifest_dest }}/service.yaml"
+  changed_when: "'created' in vllm_apply.stdout or 'configured' in vllm_apply.stdout"
+  register: vllm_apply
+
+# ---------------------------------------------------------------------------
+# Optional: apply ServiceMonitor when Prometheus Operator CRD is present
+# ---------------------------------------------------------------------------
+- name: Check if ServiceMonitor CRD is installed
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - get
+      - crd
+      - servicemonitors.monitoring.coreos.com
+  register: servicemonitor_crd
+  changed_when: false
+  failed_when: false
+
+- name: Copy ServiceMonitor manifest
+  ansible.builtin.copy:
+    src: servicemonitor.yaml
+    dest: "{{ vllm_manifest_dest }}/servicemonitor.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  when: servicemonitor_crd.rc == 0
+
+- name: Apply vLLM ServiceMonitor (Prometheus Operator)
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ vllm_manifest_dest }}/servicemonitor.yaml"
+  changed_when: "'created' in vllm_sm_apply.stdout or 'configured' in vllm_sm_apply.stdout"
+  register: vllm_sm_apply
+  when: servicemonitor_crd.rc == 0
+
+# ---------------------------------------------------------------------------
+# Wait for vLLM to be ready
+# Model loading can take 3-10 minutes on first start
+# ---------------------------------------------------------------------------
+- name: Wait for vLLM Deployment rollout
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vllm_namespace }}"
+      - rollout
+      - status
+      - deployment/vllm
+      - --timeout=900s
+  changed_when: false
+
+- name: Verify vLLM /health endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:8000/health"
+    status_code: 200
+  register: vllm_health
+  retries: "{{ vllm_ready_retries }}"
+  delay: "{{ vllm_ready_delay }}"
+  until: vllm_health.status == 200
+  # Requires kubectl port-forward or direct node access on port 8000;
+  # on a single-node cluster the pod IP is reachable from the host.
+  ignore_errors: true
+
+- name: Verify vLLM /v1/models endpoint
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vllm_namespace }}"
+      - exec
+      - deployment/vllm
+      - --
+      - curl
+      - -fsS
+      - http://localhost:8000/v1/models
+  register: vllm_models_response
+  changed_when: false
+  retries: "{{ vllm_ready_retries }}"
+  delay: "{{ vllm_ready_delay }}"
+  until: vllm_models_response.rc == 0
+
+- name: Display vLLM served models
+  ansible.builtin.debug:
+    msg: "{{ vllm_models_response.stdout }}"

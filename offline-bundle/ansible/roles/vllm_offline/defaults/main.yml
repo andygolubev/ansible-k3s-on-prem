@@ -1,0 +1,13 @@
+---
+vllm_payload_dir: "{{ offline_bundle_root }}/payload/vllm"
+vllm_image_archive: "{{ vllm_payload_dir }}/images/vllm-openai.tar"
+vllm_image_ref_file: "{{ vllm_payload_dir }}/VLLM_IMAGE"
+
+vllm_models_src_dir: "{{ offline_bundle_root }}/payload/models"
+vllm_models_dest_dir: /opt/models
+vllm_model_name: Qwen2.5-7B-Instruct
+
+vllm_namespace: llm
+vllm_manifest_dest: /tmp/offline-vllm
+vllm_ready_retries: 60
+vllm_ready_delay: 10

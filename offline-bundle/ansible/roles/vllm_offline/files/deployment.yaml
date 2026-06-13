@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: llm
+  labels:
+    app: vllm
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/managed-by: offline-bundle
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+      annotations:
+        # Prometheus scrape annotations as fallback when no ServiceMonitor is present
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Node scheduling — GPU node only
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vllm
+          # Image is loaded into containerd from the offline bundle.
+          # This tag must match the archive in payload/vllm/images/vllm-openai.tar.
+          image: vllm/vllm-openai:v0.8.5
+          imagePullPolicy: Never
+          command:
+            - python3
+            - -m
+            - vllm.entrypoints.openai.api_server
+          args:
+            - --model
+            - /models/Qwen2.5-7B-Instruct
+            - --dtype
+            - float16
+            - --max-model-len
+            - "4096"
+            - --gpu-memory-utilization
+            - "0.85"
+            - --max-num-seqs
+            - "8"
+            - --port
+            - "8000"
+            - --host
+            - "0.0.0.0"
+            - --served-model-name
+            - Qwen2.5-7B-Instruct
+          env:
+            # Fully offline: disable all Hugging Face network access
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            - name: HF_DATASETS_OFFLINE
+              value: "1"
+            - name: HUGGINGFACE_HUB_VERBOSITY
+              value: error
+            # Point HF cache to the mounted model directory
+            - name: HF_HOME
+              value: /models
+            - name: TRANSFORMERS_CACHE
+              value: /models
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            requests:
+              # Reserve 1 full GPU; the A10G has 24 GB VRAM
+              nvidia.com/gpu: "1"
+              # Conservative CPU/memory for co-tenancy on g5.2xlarge (8 vCPU, 32 GiB)
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              nvidia.com/gpu: "1"
+              cpu: "6"
+              memory: 24Gi
+          volumeMounts:
+            - name: model-dir
+              mountPath: /models
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+      volumes:
+        - name: model-dir
+          hostPath:
+            # Canonical model copy on EBS root (persistent, not NVMe)
+            path: /opt/models
+            type: Directory
+      # Do not pull any images — everything must be pre-loaded
+      imagePullSecrets: []

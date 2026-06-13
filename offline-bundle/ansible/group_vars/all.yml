@@ -44,3 +44,18 @@ argocd_namespace: argocd
 argocd_manifest_src: "{{ gitops_payload_dir }}/argocd/install-local.yaml"
 argocd_ready_retries: 60
 argocd_ready_delay: 5
+
+# GPU offline role variables
+gpu_payload_dir: "{{ offline_bundle_root }}/payload/gpu"
+gpu_nvme_device: /dev/nvme1n1
+gpu_nvme_mount: /mnt/nvme
+
+# vLLM offline role variables
+vllm_payload_dir: "{{ offline_bundle_root }}/payload/vllm"
+vllm_models_src_dir: "{{ offline_bundle_root }}/payload/models"
+vllm_models_dest_dir: /opt/models
+vllm_model_name: Qwen2.5-7B-Instruct
+vllm_namespace: llm
+vllm_manifest_dest: /tmp/offline-vllm
+vllm_ready_retries: 60
+vllm_ready_delay: 10

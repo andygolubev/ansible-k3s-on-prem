@@ -1,0 +1,19 @@
+---
+# Paths within the offline bundle (resolved at runtime via offline_bundle_root)
+gpu_payload_dir: "{{ offline_bundle_root }}/payload/gpu"
+gpu_driver_deb_dir: "{{ gpu_payload_dir }}/debs/nvidia-driver"
+gpu_ctk_deb_dir: "{{ gpu_payload_dir }}/debs/nvidia-ctk"
+gpu_images_dir: "{{ gpu_payload_dir }}/images"
+gpu_device_plugin_manifest_src: "{{ gpu_payload_dir }}/device-plugin.yaml"
+gpu_device_plugin_image_archive: "{{ gpu_images_dir }}/nvidia-device-plugin.tar"
+gpu_device_plugin_manifest_dest: /tmp/offline-nvidia-device-plugin.yaml
+
+# NVMe instance store
+gpu_nvme_device: /dev/nvme1n1
+gpu_nvme_mount: /mnt/nvme
+gpu_nvme_model_cache_dir: "{{ gpu_nvme_mount }}/model-cache"
+
+# GPU validation
+gpu_validation_pod_manifest_dest: /tmp/gpu-validation-pod.yaml
+gpu_validation_retries: 30
+gpu_validation_delay: 10
