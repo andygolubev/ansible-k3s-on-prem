@@ -9,6 +9,7 @@ DEB_DIR="$PAYLOAD_DIR/debs/ubuntu-26.04-amd64/ansible-and-deps"
 PACKAGES=(
   ansible
   ansible-core
+  git
   python3
   sudo
 )

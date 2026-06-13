@@ -1,13 +1,13 @@
 # Offline Single-Node K3s Bundle
 
-This bundle installs a single-node K3s server on an isolated Ubuntu 26.04 AMD64 UTM VM.
+This bundle installs a single-node K3s server on an isolated Ubuntu 26.04 AMD64 host, such as a UTM VM or EC2 instance.
 
-Ansible runs inside the VM and targets `localhost` with `ansible_connection=local`. SSH and Docker are not required on the VM for the standard workflow.
+Ansible runs inside the target host and targets `localhost` with `ansible_connection=local`. Docker is not required on the target, and SSH is only needed if you use SCP or remote shell access to transfer and run the bundle.
 
 ## Supported Environment
 
 - Preparation host: Linux AMD64, or Docker running `ubuntu:26.04` with `--platform linux/amd64`
-- Target VM: Ubuntu 26.04 LTS AMD64
+- Target host: Ubuntu 26.04 LTS AMD64
 - Cluster: single-node K3s server
 - Network during install: isolated, no internet access
 
@@ -121,7 +121,7 @@ If K3s version resolution fails, rerun with verbose output:
 VERBOSE=1 ./scripts/download-k3s-artifacts.sh
 ```
 
-## Copy Bundle To The VM
+## Copy Bundle To The Target
 
 Copy the complete `offline-bundle/` directory after `payload/` has been prepared.
 
@@ -129,9 +129,9 @@ Preferred transfer options:
 
 1. UTM shared directory.
 2. An ISO image containing `offline-bundle/`.
-3. Temporary SCP, if you separately choose to install and enable SSH in the VM.
+3. SCP, if SSH access is available on the target.
 
-Example once the bundle is visible in the VM:
+Example once the bundle is visible on the target:
 
 ```bash
 cp -a /path/to/offline-bundle "$HOME/offline-bundle"
@@ -150,7 +150,7 @@ This should fail in the isolated target environment.
 
 ## Verify Local Payload Offline
 
-Inside the VM:
+Inside the target:
 
 ```bash
 cd "$HOME/offline-bundle"
@@ -201,7 +201,8 @@ After the playbook completes:
 
 ```bash
 sudo k3s kubectl get nodes -o wide
+sudo k3s kubectl get pods -A -o wide
 sudo systemctl status k3s
 ```
 
-Expected result: one ready K3s server node.
+Expected result: one Ready K3s server node and running core `kube-system` pods.

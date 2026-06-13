@@ -1,0 +1,24 @@
+replicaCount: 0
+
+image:
+  repository: localhost:5000/agent-chatbot
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+vllm:
+  baseUrl: http://vllm.vllm.svc.cluster.local:8000/v1
+  model: local-model
+  apiKey: EMPTY
+  temperature: "0.2"
+
+langfuse:
+  host: ""
+  publicKey: ""
+  secretKey: ""
+
+resources: {}
+

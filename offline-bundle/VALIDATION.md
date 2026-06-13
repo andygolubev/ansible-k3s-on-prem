@@ -41,3 +41,20 @@ cd offline-bundle
 ```
 
 `verify-artifacts.sh` requires real K3s artifacts, Ubuntu 26.04 AMD64 `.deb` packages, and `payload/checksums.txt`.
+
+Validated on an isolated Ubuntu 26.04 AMD64 EC2 target:
+
+```bash
+cd "$HOME/offline-bundle"
+./scripts/verify-artifacts.sh
+sudo ./scripts/install-ansible-offline.sh
+
+cd "$HOME/offline-bundle/ansible"
+ansible-playbook -i inventory.ini playbooks/site.yml
+
+sudo k3s kubectl get nodes -o wide
+sudo k3s kubectl get pods -A -o wide
+sudo systemctl status k3s
+```
+
+Expected result: Ansible installs from local `.deb` packages, the K3s playbook completes without internet access, the single node is Ready, and core `kube-system` pods are Running or Completed.

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "agent.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "agent.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "agent.name" . }}
+    spec:
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: VLLM_BASE_URL
+              value: {{ .Values.vllm.baseUrl | quote }}
+            - name: VLLM_MODEL
+              value: {{ .Values.vllm.model | quote }}
+            - name: VLLM_API_KEY
+              value: {{ .Values.vllm.apiKey | quote }}
+            - name: VLLM_TEMPERATURE
+              value: {{ .Values.vllm.temperature | quote }}
+            - name: LANGFUSE_HOST
+              value: {{ .Values.langfuse.host | quote }}
+            - name: LANGFUSE_PUBLIC_KEY
+              value: {{ .Values.langfuse.publicKey | quote }}
+            - name: LANGFUSE_SECRET_KEY
+              value: {{ .Values.langfuse.secretKey | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
