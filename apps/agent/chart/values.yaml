@@ -1,4 +1,4 @@
-replicaCount: 0
+replicaCount: 1
 
 image:
   repository: localhost:5000/agent-chatbot
@@ -10,8 +10,8 @@ service:
   port: 8080
 
 vllm:
-  baseUrl: http://vllm.vllm.svc.cluster.local:8000/v1
-  model: local-model
+  baseUrl: http://vllm.llm.svc.cluster.local:8000/v1
+  model: Qwen2.5-7B-Instruct
   apiKey: EMPTY
   temperature: "0.2"
 
