@@ -9,6 +9,10 @@ required_files=(
   "payload/k3s/k3s"
   "payload/k3s/install.sh"
   "payload/k3s/k3s-airgap-images-amd64.tar.zst"
+  "payload/gitops/argocd/VERSION"
+  "payload/gitops/argocd/install.yaml"
+  "payload/gitops/argocd/install-local.yaml"
+  "payload/gitops/images/images.tsv"
   "payload/checksums.txt"
 )
 
@@ -22,6 +26,28 @@ done
 
 if [[ -z "$(find "$BUNDLE_DIR/payload/debs/ubuntu-26.04-amd64/ansible-and-deps" -maxdepth 1 -type f -name '*.deb' -print -quit)" ]]; then
   echo "Missing required Ansible .deb packages." >&2
+  missing=1
+fi
+
+if [[ -f "$BUNDLE_DIR/payload/gitops/images/images.tsv" ]]; then
+  while IFS=$'\t' read -r _original _local archive; do
+    if [[ -z "${archive:-}" ]]; then
+      echo "Malformed image metadata row in payload/gitops/images/images.tsv" >&2
+      missing=1
+    elif [[ ! -f "$BUNDLE_DIR/$archive" ]]; then
+      echo "Missing required image archive: $archive" >&2
+      missing=1
+    fi
+  done < "$BUNDLE_DIR/payload/gitops/images/images.tsv"
+fi
+
+if [[ ! -d "$BUNDLE_DIR/../gitops/app-of-apps" ]]; then
+  echo "Missing app-of-apps source directory next to offline-bundle: gitops/app-of-apps" >&2
+  missing=1
+fi
+
+if [[ ! -d "$BUNDLE_DIR/../apps/agent" ]]; then
+  echo "Missing agent source directory next to offline-bundle: apps/agent" >&2
   missing=1
 fi
 

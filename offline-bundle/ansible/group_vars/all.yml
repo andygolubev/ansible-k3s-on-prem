@@ -16,3 +16,29 @@ k3s_install_args:
   - "644"
 k3s_ready_retries: 20
 k3s_ready_delay: 6
+
+project_root: "{{ offline_bundle_root | dirname }}"
+
+gitops_payload_dir: "{{ offline_bundle_root }}/payload/gitops"
+gitops_images_dir: "{{ gitops_payload_dir }}/images"
+gitops_images_manifest: "{{ gitops_images_dir }}/images.tsv"
+
+local_registry_host: localhost:5000
+local_registry_namespace: local-registry
+local_registry_manifest_dest: /tmp/offline-local-registry.yaml
+local_registry_ready_retries: 30
+local_registry_ready_delay: 2
+
+git_mirror_namespace: gitops
+git_mirror_manifest_dest: /tmp/offline-git-mirror.yaml
+git_mirror_root: /var/lib/offline-gitops/git
+git_mirror_image: localhost:5000/nginx:1.27-alpine
+git_mirror_service_url: http://git-mirror.gitops.svc.cluster.local
+gitops_app_of_apps_src: "{{ project_root }}/gitops/app-of-apps"
+gitops_agent_src: "{{ project_root }}/apps/agent"
+gitops_root_application: "{{ gitops_app_of_apps_src }}/root.yaml"
+
+argocd_namespace: argocd
+argocd_manifest_src: "{{ gitops_payload_dir }}/argocd/install-local.yaml"
+argocd_ready_retries: 60
+argocd_ready_delay: 5

@@ -4,3 +4,4 @@
   become: true
   roles:
     - k3s_offline
+    - argocd_offline

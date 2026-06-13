@@ -1,0 +1,235 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Verify GitOps image metadata exists
+  ansible.builtin.stat:
+    path: "{{ gitops_images_manifest }}"
+  register: gitops_images_metadata
+
+- name: Fail when GitOps image metadata is missing
+  ansible.builtin.fail:
+    msg: "Missing GitOps image metadata: {{ gitops_images_manifest }}. Run scripts/download-argocd-artifacts.sh first."
+  when: not gitops_images_metadata.stat.exists
+
+- name: Verify Argo CD manifest exists
+  ansible.builtin.stat:
+    path: "{{ argocd_manifest_src }}"
+  register: argocd_manifest
+
+- name: Fail when Argo CD local manifest is missing
+  ansible.builtin.fail:
+    msg: "Missing local Argo CD manifest: {{ argocd_manifest_src }}"
+  when: not argocd_manifest.stat.exists
+
+- name: Verify app-of-apps source exists
+  ansible.builtin.stat:
+    path: "{{ gitops_app_of_apps_src }}"
+  register: app_of_apps_source
+
+- name: Fail when app-of-apps source is missing
+  ansible.builtin.fail:
+    msg: "Missing app-of-apps source: {{ gitops_app_of_apps_src }}"
+  when: not app_of_apps_source.stat.isdir
+
+- name: Verify agent source exists
+  ansible.builtin.stat:
+    path: "{{ gitops_agent_src }}"
+  register: agent_source
+
+- name: Fail when agent source is missing
+  ansible.builtin.fail:
+    msg: "Missing agent source: {{ gitops_agent_src }}"
+  when: not agent_source.stat.isdir
+
+- name: Import prepared image archives into K3s containerd
+  ansible.builtin.shell: |
+    set -euo pipefail
+    while IFS=$'\t' read -r _original _local archive; do
+      /usr/local/bin/k3s ctr images import "{{ offline_bundle_root }}/${archive}"
+    done < "{{ gitops_images_manifest }}"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Render local registry manifest
+  ansible.builtin.template:
+    src: local-registry.yaml.j2
+    dest: "{{ local_registry_manifest_dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply local registry manifest
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ local_registry_manifest_dest }}"
+  changed_when: "'created' in registry_apply.stdout or 'configured' in registry_apply.stdout"
+  register: registry_apply
+
+- name: Wait for local registry rollout
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ local_registry_namespace }}"
+      - rollout
+      - status
+      - deployment/local-registry
+      - --timeout=120s
+  changed_when: false
+
+- name: Wait for local registry API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:5000/v2/"
+    status_code: 200
+  register: registry_ready
+  retries: "{{ local_registry_ready_retries }}"
+  delay: "{{ local_registry_ready_delay }}"
+  until: registry_ready.status == 200
+
+- name: Push prepared images into local registry
+  ansible.builtin.shell: |
+    set -euo pipefail
+    while IFS=$'\t' read -r original local_image _archive; do
+      /usr/local/bin/k3s ctr images tag "$original" "$local_image" >/dev/null 2>&1 || true
+      /usr/local/bin/k3s ctr images push --plain-http "$local_image"
+    done < "{{ gitops_images_manifest }}"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Create local Git mirror root
+  ansible.builtin.file:
+    path: "{{ git_mirror_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Generate bare Git mirrors from local source folders
+  ansible.builtin.shell: |
+    set -euo pipefail
+    make_mirror() {
+      name="$1"
+      src="$2"
+      dest="{{ git_mirror_root }}/${name}.git"
+      workdir="$(mktemp -d)"
+      cp -a "${src}/." "$workdir/"
+      git -C "$workdir" init
+      git -C "$workdir" config user.email "offline-gitops@example.invalid"
+      git -C "$workdir" config user.name "Offline GitOps"
+      git -C "$workdir" add .
+      git -C "$workdir" commit -m "offline bootstrap"
+      rm -rf "$dest"
+      git clone --bare "$workdir" "$dest"
+      git --git-dir="$dest" update-server-info
+      rm -rf "$workdir"
+    }
+    make_mirror app-of-apps "{{ gitops_app_of_apps_src }}"
+    make_mirror agent "{{ gitops_agent_src }}"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Render Git mirror manifest
+  ansible.builtin.template:
+    src: git-mirror.yaml.j2
+    dest: "{{ git_mirror_manifest_dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply Git mirror manifest
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ git_mirror_manifest_dest }}"
+  changed_when: "'created' in git_mirror_apply.stdout or 'configured' in git_mirror_apply.stdout"
+  register: git_mirror_apply
+
+- name: Wait for Git mirror rollout
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ git_mirror_namespace }}"
+      - rollout
+      - status
+      - deployment/git-mirror
+      - --timeout=120s
+  changed_when: false
+
+- name: Create Argo CD namespace
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - create
+      - namespace
+      - "{{ argocd_namespace }}"
+  register: argocd_namespace_create
+  failed_when: argocd_namespace_create.rc != 0 and 'AlreadyExists' not in argocd_namespace_create.stderr
+  changed_when: argocd_namespace_create.rc == 0
+
+- name: Apply local Argo CD manifests
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ argocd_namespace }}"
+      - apply
+      - -f
+      - "{{ argocd_manifest_src }}"
+  changed_when: "'created' in argocd_apply.stdout or 'configured' in argocd_apply.stdout"
+  register: argocd_apply
+
+- name: Wait for Argo CD workloads
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for deployment in argocd-applicationset-controller argocd-dex-server argocd-notifications-controller argocd-redis argocd-repo-server argocd-server; do
+      if /usr/local/bin/k3s kubectl -n "{{ argocd_namespace }}" get deployment "$deployment" >/dev/null 2>&1; then
+        /usr/local/bin/k3s kubectl -n "{{ argocd_namespace }}" rollout status "deployment/${deployment}" --timeout=300s
+      fi
+    done
+    if /usr/local/bin/k3s kubectl -n "{{ argocd_namespace }}" get statefulset argocd-application-controller >/dev/null 2>&1; then
+      /usr/local/bin/k3s kubectl -n "{{ argocd_namespace }}" rollout status statefulset/argocd-application-controller --timeout=300s
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Apply app-of-apps root Application
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ gitops_root_application }}"
+  changed_when: "'created' in root_app_apply.stdout or 'configured' in root_app_apply.stdout"
+  register: root_app_apply
+
+- name: Verify agent Application exists
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ argocd_namespace }}"
+      - get
+      - application
+      - agent
+  register: agent_application
+  changed_when: false
+  retries: "{{ argocd_ready_retries }}"
+  delay: "{{ argocd_ready_delay }}"
+  until: agent_application.rc == 0

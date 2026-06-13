@@ -90,8 +90,8 @@ echo "$ARGOCD_VERSION" > "$ARGOCD_DIR/VERSION"
 curl -fL "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml" \
   -o "$ARGOCD_DIR/install.yaml"
 
-mapfile -t ARGOCD_IMAGES < <(
-  python3 - "$ARGOCD_DIR/install.yaml" <<'PY'
+ARGOCD_IMAGES_FILE="$ARGOCD_DIR/images.txt"
+python3 - "$ARGOCD_DIR/install.yaml" > "$ARGOCD_IMAGES_FILE" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -105,7 +105,6 @@ for match in re.finditer(r"(?m)^\s*image:\s*[\"']?([^\"'\s]+)[\"']?\s*$", text):
 for image in images:
     print(image)
 PY
-)
 
 LOCAL_INSTALL="$ARGOCD_DIR/install-local.yaml"
 cp "$ARGOCD_DIR/install.yaml" "$LOCAL_INSTALL"
@@ -129,7 +128,10 @@ archive_image() {
 
 : > "$IMAGES_DIR/images.tsv"
 
-for image in "${ARGOCD_IMAGES[@]}"; do
+while IFS= read -r image; do
+  if [[ -z "$image" ]]; then
+    continue
+  fi
   local_image="$LOCAL_REGISTRY/$image"
   archive_name="$(sanitize_image "$image").tar"
   archive_image "$image" "$local_image" "$archive_name"
@@ -140,7 +142,7 @@ from pathlib import Path
 path = Path(sys.argv[1])
 path.write_text(path.read_text().replace(sys.argv[2], sys.argv[3]))
 PY
-done
+done < "$ARGOCD_IMAGES_FILE"
 
 archive_image "$REGISTRY_IMAGE" "$LOCAL_REGISTRY/$REGISTRY_IMAGE" "$(sanitize_image "$REGISTRY_IMAGE").tar"
 archive_image "$GIT_MIRROR_IMAGE" "$LOCAL_REGISTRY/$GIT_MIRROR_IMAGE" "$(sanitize_image "$GIT_MIRROR_IMAGE").tar"

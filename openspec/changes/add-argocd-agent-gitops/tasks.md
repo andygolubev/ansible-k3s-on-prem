@@ -23,32 +23,32 @@
 
 ## 4. Target-Side Offline Bootstrap
 
-- [ ] 4.1 Extend artifact verification to require Argo CD manifests, image archives, GitOps repository content, and image metadata.
-- [ ] 4.2 Add Ansible variables for local registry, Argo CD namespace, Git mirror namespace, image archive paths, and app-of-apps settings.
-- [ ] 4.3 Add an Ansible role or tasks to import the registry image into K3s/containerd and run a `localhost:5000` registry.
-- [ ] 4.4 Add an Ansible role or tasks to tag and push prepared images into `localhost:5000`.
-- [ ] 4.5 Add an Ansible role or tasks to create bare Git mirrors from the app-of-apps and agent folders.
-- [ ] 4.6 Add an Ansible role or tasks to run the read-only nginx Git mirror from the local registry.
+- [x] 4.1 Extend artifact verification to require Argo CD manifests, image archives, GitOps repository content, and image metadata.
+- [x] 4.2 Add Ansible variables for local registry, Argo CD namespace, Git mirror namespace, image archive paths, and app-of-apps settings.
+- [x] 4.3 Add an Ansible role or tasks to import the registry image into K3s/containerd and run a `localhost:5000` registry.
+- [x] 4.4 Add an Ansible role or tasks to tag and push prepared images into `localhost:5000`.
+- [x] 4.5 Add an Ansible role or tasks to create bare Git mirrors from the app-of-apps and agent folders.
+- [x] 4.6 Add an Ansible role or tasks to run the read-only nginx Git mirror from the local registry.
 
 ## 5. Argo CD Installation
 
-- [ ] 5.1 Add manifest rendering or patching so every Argo CD image reference uses `localhost:5000`.
-- [ ] 5.2 Add Ansible tasks to apply Argo CD manifests after the local registry and Git mirror are ready.
-- [ ] 5.3 Add readiness checks for Argo CD workloads and API availability.
-- [ ] 5.4 Add Ansible tasks to apply the root app-of-apps Application.
-- [ ] 5.5 Add verification that Argo CD registers the `agent` Application from the local Git mirror.
+- [x] 5.1 Add manifest rendering or patching so every Argo CD image reference uses `localhost:5000`.
+- [x] 5.2 Add Ansible tasks to apply Argo CD manifests after the local registry and Git mirror are ready.
+- [x] 5.3 Add readiness checks for Argo CD workloads and API availability.
+- [x] 5.4 Add Ansible tasks to apply the root app-of-apps Application.
+- [x] 5.5 Add verification that Argo CD registers the `agent` Application from the local Git mirror.
 
 ## 6. Documentation
 
-- [ ] 6.1 Update `offline-bundle/README-offline.md` with Argo CD payload preparation, copy, verify, install, and validation steps.
-- [ ] 6.2 Update `offline-bundle/VALIDATION.md` with offline Argo CD and app-of-apps validation commands.
-- [ ] 6.3 Document how to configure the agent for VLLM and Langfuse once those services exist.
-- [ ] 6.4 Document the single-node assumptions for `localhost:5000` registry and read-only Git mirror.
+- [x] 6.1 Update `offline-bundle/README-offline.md` with Argo CD payload preparation, copy, verify, install, and validation steps.
+- [x] 6.2 Update `offline-bundle/VALIDATION.md` with offline Argo CD and app-of-apps validation commands.
+- [x] 6.3 Document how to configure the agent for VLLM and Langfuse once those services exist.
+- [x] 6.4 Document the single-node assumptions for `localhost:5000` registry and read-only Git mirror.
 
 ## 7. Validation
 
-- [ ] 7.1 Run shell syntax checks for all new and modified scripts.
-- [ ] 7.2 Run local artifact verification against a prepared payload.
-- [ ] 7.3 Run Ansible syntax checks for the updated playbook and roles.
+- [x] 7.1 Run shell syntax checks for all new and modified scripts.
+- [x] 7.2 Run local artifact verification against a prepared payload.
+- [x] 7.3 Run Ansible syntax checks for the updated playbook and roles.
 - [ ] 7.4 Validate on an isolated Ubuntu 26.04 AMD64 target that K3s, local registry, Git mirror, Argo CD, app-of-apps, and the `agent` Application install without internet access.
 - [ ] 7.5 Capture final verification output for nodes, pods, Argo CD Applications, local registry contents, and Git mirror accessibility.
