@@ -8,6 +8,8 @@ bash -n offline-bundle/scripts/download-k3s-artifacts.sh \
   offline-bundle/scripts/download-gpu-artifacts.sh \
   offline-bundle/scripts/download-vllm-artifacts.sh \
   offline-bundle/scripts/download-model-artifacts.sh \
+  offline-bundle/scripts/download-operator-tools.sh \
+  offline-bundle/scripts/download-observability-artifacts.sh \
   offline-bundle/scripts/install-ansible-offline.sh \
   offline-bundle/scripts/verify-artifacts.sh
 
@@ -63,10 +65,107 @@ sudo k3s kubectl -n argocd get applications
 curl -fsS http://127.0.0.1:5000/v2/
 curl -fsS http://127.0.0.1:5000/v2/_catalog
 git ls-remote git://127.0.0.1/app-of-apps.git HEAD
+k9s version --short
+sudo k3s kubectl -n observability get pods
+sudo k3s kubectl -n observability get svc prometheus grafana loki tempo otel-collector
 sudo systemctl status k3s
 ```
 
 Expected result: Ansible installs from local `.deb` packages, the K3s/Argo CD playbook completes without internet access, the single node is Ready, core `kube-system` pods are Running or Completed, Argo CD pods are Running, the `agent` Application exists, the local registry responds, and the read-only Git mirror returns refs over `git://`.
+
+## Operator Tooling Acceptance Criteria
+
+```bash
+# k9s must be installed from the offline payload
+k9s version --short
+
+# k9s can use the local K3s kubeconfig when run interactively
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml k9s
+```
+
+Expected result: the version command succeeds without network access, and the interactive UI can open the local cluster.
+
+## Observability Acceptance Criteria
+
+All observability workloads must be installed from local image archives and run in the `observability` namespace.
+
+```bash
+sudo k3s kubectl -n observability get pods -o wide
+sudo k3s kubectl -n observability rollout status deployment/prometheus --timeout=300s
+sudo k3s kubectl -n observability rollout status deployment/grafana --timeout=300s
+sudo k3s kubectl -n observability rollout status deployment/loki --timeout=300s
+sudo k3s kubectl -n observability rollout status deployment/tempo --timeout=300s
+sudo k3s kubectl -n observability rollout status deployment/otel-collector --timeout=300s
+sudo k3s kubectl -n observability rollout status daemonset/promtail --timeout=300s
+sudo k3s kubectl -n observability rollout status daemonset/node-exporter --timeout=300s
+sudo k3s kubectl -n observability rollout status daemonset/dcgm-exporter --timeout=300s
+```
+
+### Prometheus targets
+
+```bash
+sudo k3s kubectl -n observability port-forward svc/prometheus 9090:9090 &
+sleep 3
+
+curl -fsS "http://localhost:9090/api/v1/targets" | python3 -m json.tool
+curl -fsS "http://localhost:9090/api/v1/query?query=up" | python3 -m json.tool
+curl -fsS "http://localhost:9090/api/v1/query?query=DCGM_FI_DEV_GPU_UTIL" | python3 -m json.tool
+curl -fsS "http://localhost:9090/api/v1/query?query=vllm:num_requests_running" | python3 -m json.tool
+
+kill %1
+```
+
+Expected result: Prometheus reports targets for itself, kube-state-metrics, node-exporter, dcgm-exporter, vLLM, Loki, Tempo, and otel-collector. vLLM and GPU queries may be empty until the relevant pods emit metrics, but the targets should be present and scrapeable.
+
+### Grafana datasources and dashboard
+
+```bash
+sudo k3s kubectl -n observability port-forward svc/grafana 3000:3000 &
+sleep 3
+
+curl -fsS -u admin:admin http://localhost:3000/api/datasources | python3 -m json.tool
+curl -fsS -u admin:admin http://localhost:3000/api/search?query=vLLM | python3 -m json.tool
+
+kill %1
+```
+
+Expected result: Prometheus, Loki, and Tempo datasources exist, and the `vLLM GPU Operations` dashboard is discoverable.
+
+### Loki logs
+
+```bash
+sudo k3s kubectl -n observability port-forward svc/loki 3100:3100 &
+sleep 3
+
+curl -G -fsS http://localhost:3100/loki/api/v1/query \
+  --data-urlencode 'query={namespace="llm"}' | python3 -m json.tool
+curl -G -fsS http://localhost:3100/loki/api/v1/query \
+  --data-urlencode 'query={namespace="agent"}' | python3 -m json.tool
+
+kill %1
+```
+
+Expected result: Loki accepts the queries and returns recent logs once the vLLM and agent pods have emitted output.
+
+### Tempo traces
+
+Generate a demo agent request, then check Tempo through Grafana or the Tempo API:
+
+```bash
+sudo k3s kubectl -n agent port-forward svc/agent 8080:8080 &
+sleep 3
+curl -fsS http://localhost:8080/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Say hello in one short sentence."}' | python3 -m json.tool
+kill %1
+
+sudo k3s kubectl -n observability port-forward svc/tempo 3200:3200 &
+sleep 5
+curl -fsS "http://localhost:3200/api/search?tags=service.name%3Dagent-chatbot" | python3 -m json.tool
+kill %1
+```
+
+Expected result: the agent response reports `tempo_tracing_enabled: true`, and Tempo contains at least one trace for `service.name=agent-chatbot`.
 
 ## GPU and vLLM Acceptance Criteria
 

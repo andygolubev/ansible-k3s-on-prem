@@ -45,6 +45,21 @@ argocd_manifest_src: "{{ gitops_payload_dir }}/argocd/install-local.yaml"
 argocd_ready_retries: 60
 argocd_ready_delay: 5
 
+# Operator tooling role variables
+operator_tools_payload_dir: "{{ offline_bundle_root }}/payload/tools"
+k9s_binary_src: "{{ operator_tools_payload_dir }}/k9s/k9s"
+k9s_version_file: "{{ operator_tools_payload_dir }}/k9s/VERSION"
+k9s_binary_dest: /usr/local/bin/k9s
+
+# Observability offline role variables
+observability_payload_dir: "{{ offline_bundle_root }}/payload/observability"
+observability_images_manifest: "{{ observability_payload_dir }}/images/images.tsv"
+observability_manifest_src: "{{ observability_payload_dir }}/manifests/install-local.yaml"
+observability_versions_file: "{{ observability_payload_dir }}/VERSIONS.env"
+observability_dashboards_dir: "{{ observability_payload_dir }}/grafana/dashboards"
+observability_namespace: observability
+observability_ready_timeout: 300s
+
 # GPU offline role variables
 gpu_payload_dir: "{{ offline_bundle_root }}/payload/gpu"
 gpu_nvme_device: /dev/nvme1n1

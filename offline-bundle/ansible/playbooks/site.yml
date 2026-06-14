@@ -6,4 +6,6 @@
     - k3s_offline
     - gpu_offline
     - argocd_offline
+    - operator_tools_offline
+    - observability_offline
     - vllm_offline

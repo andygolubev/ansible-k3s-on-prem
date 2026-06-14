@@ -12,8 +12,11 @@ The service calls an OpenAI-compatible local model endpoint. The expected future
 - `LANGFUSE_HOST`: optional Langfuse host URL.
 - `LANGFUSE_PUBLIC_KEY`: optional Langfuse public key.
 - `LANGFUSE_SECRET_KEY`: optional Langfuse secret key.
+- `TEMPO_TRACING_ENABLED`: enables OpenTelemetry trace export to Tempo when set to `true`.
+- `OTEL_SERVICE_NAME`: OpenTelemetry service name. Default: `agent-chatbot`.
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP gRPC endpoint. Default in the chart: `otel-collector.observability.svc.cluster.local:4317`.
+- `OTEL_EXPORTER_OTLP_INSECURE`: use insecure local OTLP transport. Default in the chart: `true`.
 
-When Langfuse settings are absent, tracing is disabled and the service still starts.
+When Langfuse settings are absent, Langfuse tracing is disabled and the service still starts. Tempo tracing is independent and uses OpenTelemetry; it does not require Langfuse credentials or external network access.
 
-The Helm chart defaults to `replicaCount: 0` because VLLM is planned for a later task. Set `replicaCount` to a positive number after the model endpoint exists.
-
+The Helm chart points Tempo tracing at the in-cluster OpenTelemetry Collector by default. Set `tracing.tempo.enabled=false` to disable trace export.

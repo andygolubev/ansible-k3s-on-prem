@@ -32,6 +32,21 @@ vllm_files=(
   "payload/vllm/VLLM_IMAGE"
 )
 
+operator_tool_files=(
+  "payload/tools/k9s/k9s"
+  "payload/tools/k9s/VERSION"
+  "payload/bin/k9s"
+)
+
+observability_files=(
+  "payload/observability/VERSIONS.env"
+  "payload/observability/manifests/install.yaml"
+  "payload/observability/manifests/install-local.yaml"
+  "payload/observability/images/images.tsv"
+  "payload/observability/images/image-map.tsv"
+  "payload/observability/grafana/dashboards/vllm-gpu.json"
+)
+
 model_required_files=(
   "config.json"
   "tokenizer_config.json"
@@ -107,6 +122,41 @@ else
   echo "Note: vLLM artifacts not found (payload/vllm/VLLM_IMAGE missing). Run download-vllm-artifacts.sh to include them." >&2
 fi
 
+# Operator tooling artifacts (optional — only checked if download-operator-tools.sh has been run)
+if [[ -f "$BUNDLE_DIR/payload/tools/k9s/VERSION" ]]; then
+  for f in "${operator_tool_files[@]}"; do
+    if [[ ! -f "$BUNDLE_DIR/$f" ]]; then
+      echo "Missing operator tooling artifact: $f" >&2
+      missing=1
+    fi
+  done
+else
+  echo "Note: Operator tooling artifacts not found (payload/tools/k9s/VERSION missing). Run download-operator-tools.sh to include k9s." >&2
+fi
+
+# Observability artifacts (optional — only checked if download-observability-artifacts.sh has been run)
+if [[ -f "$BUNDLE_DIR/payload/observability/VERSIONS.env" ]]; then
+  for f in "${observability_files[@]}"; do
+    if [[ ! -f "$BUNDLE_DIR/$f" ]]; then
+      echo "Missing observability artifact: $f" >&2
+      missing=1
+    fi
+  done
+  if [[ -f "$BUNDLE_DIR/payload/observability/images/images.tsv" ]]; then
+    while IFS=$'\t' read -r _original _local archive; do
+      if [[ -z "${archive:-}" ]]; then
+        echo "Malformed image metadata row in payload/observability/images/images.tsv" >&2
+        missing=1
+      elif [[ ! -f "$BUNDLE_DIR/$archive" ]]; then
+        echo "Missing observability image archive: $archive" >&2
+        missing=1
+      fi
+    done < "$BUNDLE_DIR/payload/observability/images/images.tsv"
+  fi
+else
+  echo "Note: Observability artifacts not found (payload/observability/VERSIONS.env missing). Run download-observability-artifacts.sh to include them." >&2
+fi
+
 # Model artifacts (optional — only checked if download-model-artifacts.sh has been run)
 MODEL_SNAPSHOT_DIR="$BUNDLE_DIR/payload/models/Qwen2.5-7B-Instruct"
 if [[ -d "$MODEL_SNAPSHOT_DIR" ]]; then
@@ -151,6 +201,11 @@ fi
 
 if [[ ! -x "$BUNDLE_DIR/payload/bin/crane" ]]; then
   echo "crane binary is not executable." >&2
+  exit 1
+fi
+
+if [[ -f "$BUNDLE_DIR/payload/bin/k9s" && ! -x "$BUNDLE_DIR/payload/bin/k9s" ]]; then
+  echo "k9s binary is not executable." >&2
   exit 1
 fi
 

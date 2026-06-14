@@ -1,0 +1,144 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Verify observability image metadata exists
+  ansible.builtin.stat:
+    path: "{{ observability_images_manifest }}"
+  register: observability_images_metadata
+
+- name: Fail when observability image metadata is missing
+  ansible.builtin.fail:
+    msg: "Missing observability image metadata: {{ observability_images_manifest }}. Run scripts/download-observability-artifacts.sh first."
+  when: not observability_images_metadata.stat.exists
+
+- name: Verify observability local manifest exists
+  ansible.builtin.stat:
+    path: "{{ observability_manifest_src }}"
+  register: observability_manifest
+
+- name: Fail when observability local manifest is missing
+  ansible.builtin.fail:
+    msg: "Missing observability local manifest: {{ observability_manifest_src }}. Run scripts/download-observability-artifacts.sh first."
+  when: not observability_manifest.stat.exists
+
+- name: Verify observability version metadata exists
+  ansible.builtin.stat:
+    path: "{{ observability_versions_file }}"
+  register: observability_versions
+
+- name: Fail when observability version metadata is missing
+  ansible.builtin.fail:
+    msg: "Missing observability version metadata: {{ observability_versions_file }}. Run scripts/download-observability-artifacts.sh first."
+  when: not observability_versions.stat.exists
+
+- name: Verify vLLM Grafana dashboard exists
+  ansible.builtin.stat:
+    path: "{{ observability_dashboards_dir }}/vllm-gpu.json"
+  register: observability_vllm_dashboard
+
+- name: Fail when vLLM Grafana dashboard is missing
+  ansible.builtin.fail:
+    msg: "Missing vLLM Grafana dashboard: {{ observability_dashboards_dir }}/vllm-gpu.json. Run scripts/download-observability-artifacts.sh first."
+  when: not observability_vllm_dashboard.stat.exists
+
+- name: Verify observability image archives exist
+  ansible.builtin.shell: |
+    set -euo pipefail
+    while IFS=$'\t' read -r _original _local archive; do
+      if [[ -z "${archive:-}" || ! -f "{{ offline_bundle_root }}/${archive}" ]]; then
+        echo "Missing observability image archive: ${archive:-<empty>}" >&2
+        exit 1
+      fi
+    done < "{{ observability_images_manifest }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Import observability image archives into K3s containerd
+  ansible.builtin.shell: |
+    set -euo pipefail
+    while IFS=$'\t' read -r _original _local archive; do
+      /usr/local/bin/k3s ctr images import "{{ offline_bundle_root }}/${archive}"
+    done < "{{ observability_images_manifest }}"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Push observability images into local registry
+  ansible.builtin.shell: |
+    set -euo pipefail
+    while IFS=$'\t' read -r _original local_image archive; do
+      "{{ offline_bundle_root }}/payload/bin/crane" --insecure push "{{ offline_bundle_root }}/${archive}" "$local_image"
+    done < "{{ observability_images_manifest }}"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Create observability namespace
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - create
+      - namespace
+      - "{{ observability_namespace }}"
+  register: observability_namespace_create
+  failed_when: observability_namespace_create.rc != 0 and 'AlreadyExists' not in observability_namespace_create.stderr
+  changed_when: observability_namespace_create.rc == 0
+
+- name: Apply Grafana vLLM dashboard ConfigMap
+  ansible.builtin.shell: |
+    set -euo pipefail
+    /usr/local/bin/k3s kubectl -n "{{ observability_namespace }}" create configmap grafana-dashboards-vllm \
+      --from-file=vllm-gpu.json="{{ observability_dashboards_dir }}/vllm-gpu.json" \
+      --dry-run=client -o yaml \
+      | /usr/local/bin/k3s kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Apply observability manifests
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - apply
+      - -f
+      - "{{ observability_manifest_src }}"
+  changed_when: "'created' in observability_apply.stdout or 'configured' in observability_apply.stdout"
+  register: observability_apply
+
+- name: Wait for observability Deployments
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for deployment in prometheus grafana loki tempo otel-collector kube-state-metrics; do
+      /usr/local/bin/k3s kubectl -n "{{ observability_namespace }}" rollout status "deployment/${deployment}" --timeout="{{ observability_ready_timeout }}"
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Wait for observability DaemonSets
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for daemonset in promtail node-exporter dcgm-exporter; do
+      /usr/local/bin/k3s kubectl -n "{{ observability_namespace }}" rollout status "daemonset/${daemonset}" --timeout="{{ observability_ready_timeout }}"
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Verify observability Services exist
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ observability_namespace }}"
+      - get
+      - service
+      - prometheus
+      - grafana
+      - loki
+      - tempo
+      - otel-collector
+  changed_when: false

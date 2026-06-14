@@ -1,0 +1,8 @@
+---
+observability_payload_dir: "{{ offline_bundle_root }}/payload/observability"
+observability_images_manifest: "{{ observability_payload_dir }}/images/images.tsv"
+observability_manifest_src: "{{ observability_payload_dir }}/manifests/install-local.yaml"
+observability_versions_file: "{{ observability_payload_dir }}/VERSIONS.env"
+observability_dashboards_dir: "{{ observability_payload_dir }}/grafana/dashboards"
+observability_namespace: observability
+observability_ready_timeout: 300s

@@ -31,6 +31,13 @@ payload/
   gitops/
     argocd/                         Argo CD install manifest (original + local-image variant)
     images/                         images.tsv manifest + image archives (.tar)
+  tools/
+    k9s/                             k9s binary and VERSION metadata
+  observability/
+    VERSIONS.env                     pinned observability component versions
+    manifests/                       observability install manifest (original + local-image variant)
+    images/                          images.tsv, image-map.tsv, and image archives (.tar)
+    grafana/dashboards/              vLLM/GPU dashboard JSON
   gpu/
     debs/nvidia-driver/             NVIDIA driver .deb packages + deps
     debs/nvidia-ctk/                NVIDIA container toolkit .deb packages + deps
@@ -108,7 +115,21 @@ cd offline-bundle
 ./scripts/download-model-artifacts.sh
 ```
 
-**Step 6 — Verify everything**:
+**Step 6 — operator tools** (needs curl/tar; runs directly on the prep host):
+
+```bash
+cd offline-bundle
+./scripts/download-operator-tools.sh
+```
+
+**Step 7 — observability stack** (needs Docker; runs directly on the prep host):
+
+```bash
+cd offline-bundle
+./scripts/download-observability-artifacts.sh
+```
+
+**Step 8 — Verify everything**:
 
 ```bash
 cd offline-bundle
@@ -135,6 +156,10 @@ sudo ./scripts/download-gpu-artifacts.sh
 
 # Qwen2.5-7B-Instruct model (~15 GB download)
 ./scripts/download-model-artifacts.sh
+
+# Operator tools and observability (Docker required for observability images)
+./scripts/download-operator-tools.sh
+./scripts/download-observability-artifacts.sh
 
 # Verify everything
 ./scripts/verify-artifacts.sh
@@ -169,6 +194,23 @@ payload/gitops/
 ```
 
 The default local registry is `localhost:5000`. Override image defaults with `REGISTRY_IMAGE`, `GIT_MIRROR_IMAGE`, `AGENT_IMAGE`, or `LOCAL_REGISTRY`.
+
+`download-operator-tools.sh` downloads a pinned Linux AMD64 `k9s` binary into:
+
+```text
+payload/tools/k9s/
+payload/bin/k9s
+```
+
+Override the version with `K9S_VERSION` or `--k9s-version`.
+
+`download-observability-artifacts.sh` copies the checked-in observability manifests and Grafana dashboard, pulls pinned images, saves image archives, rewrites the local install manifest for `localhost:5000`, and writes metadata into:
+
+```text
+payload/observability/
+```
+
+The pinned component versions are listed in `offline-bundle/observability/VERSIONS.env`. The default stack includes Prometheus, Grafana, Loki, Promtail, Tempo, OpenTelemetry Collector, kube-state-metrics, node-exporter, and NVIDIA DCGM exporter.
 
 All download scripts regenerate:
 
@@ -258,17 +300,24 @@ The `k3s_offline` role also creates `/var/lib/rancher/k3s/agent/images/.cache.js
 
 The `argocd_offline` role then imports prepared image archives, starts a single-node local registry at `localhost:5000`, pushes prepared images into it with bundled `crane`, creates read-only local Git mirrors from `gitops/app-of-apps/` and `apps/agent/`, exposes them through a host-side `git daemon` and in-cluster Service, applies the local-image Argo CD manifests, and applies the root app-of-apps Application.
 
+The `operator_tools_offline` role installs `k9s` to `/usr/local/bin/k9s`.
+
+The `observability_offline` role imports and pushes prepared observability images, creates the Grafana dashboard ConfigMap, applies the local observability manifest, and waits for Prometheus, Grafana, Loki, Promtail, Tempo, OpenTelemetry Collector, kube-state-metrics, node-exporter, and DCGM exporter. The stack is intentionally single-node with bounded `emptyDir` storage for proof-of-concept operation.
+
 ## Agent App Configuration
 
 The `apps/agent/chart/values.yaml` file controls the sample LangChain chatbot deployment:
 
-- `replicaCount`: defaults to `0` until a local VLLM endpoint is installed.
-- `vllm.baseUrl`: OpenAI-compatible local endpoint, expected to be VLLM in a later task.
+- `replicaCount`: defaults to `1` for the offline demo.
+- `vllm.baseUrl`: OpenAI-compatible local endpoint.
 - `vllm.model`: model name sent to the endpoint.
 - `vllm.apiKey`: API key value for the OpenAI-compatible client.
 - `langfuse.host`, `langfuse.publicKey`, `langfuse.secretKey`: optional Langfuse tracing settings.
+- `tracing.tempo.enabled`: enables OpenTelemetry trace export to the in-cluster collector.
+- `tracing.tempo.endpoint`: OTLP endpoint. Default: `otel-collector.observability.svc.cluster.local:4317`.
+- `tracing.tempo.serviceName`: OpenTelemetry service name.
 
-When Langfuse settings are empty, tracing is disabled and the app still starts.
+When Langfuse settings are empty, Langfuse tracing is disabled and the app still starts. Tempo tracing is separate and does not require external services.
 
 ## Storage Layout (g5.2xlarge)
 
@@ -398,27 +447,86 @@ During and after the playbook, no image pulls should occur from external registr
 
 ## Observability: GPU and vLLM Metrics
 
-If a Prometheus stack is deployed, apply the optional ServiceMonitor:
+The bundle now includes an offline observability stack in the `observability` namespace:
+
+- Prometheus for Kubernetes, node, GPU, and vLLM metrics.
+- Grafana with Prometheus, Loki, and Tempo datasources.
+- Loki and Promtail for workload logs.
+- Tempo and OpenTelemetry Collector for traces.
+- kube-state-metrics, node-exporter, and NVIDIA DCGM exporter.
+
+The Prometheus config statically scrapes vLLM at `vllm.llm.svc.cluster.local:8000` and also honors `prometheus.io/scrape` pod annotations. The existing vLLM ServiceMonitor remains optional for future Prometheus Operator deployments; this stack does not require the ServiceMonitor CRD.
+
+Access Grafana from the target:
 
 ```bash
-sudo k3s kubectl apply -f /tmp/vllm-servicemonitor.yaml
+sudo k3s kubectl -n observability port-forward svc/grafana 3000:3000
 ```
 
-Key metrics to monitor in Grafana or via `kubectl top`:
+Then open `http://localhost:3000`. The default local credentials are `admin` / `admin`; anonymous viewer access is enabled for the offline demo.
+
+Access Prometheus, Loki, or Tempo APIs:
+
+```bash
+sudo k3s kubectl -n observability port-forward svc/prometheus 9090:9090
+sudo k3s kubectl -n observability port-forward svc/loki 3100:3100
+sudo k3s kubectl -n observability port-forward svc/tempo 3200:3200
+```
+
+The installed Grafana dashboard is `vLLM GPU Operations`.
+
+Key metrics and queries to monitor in Grafana or Prometheus:
 
 | Metric | Source | Alert threshold |
 |--------|--------|----------------|
-| `nvidia_gpu_utilization` | DCGM / node-exporter | <10% for >5 min (idle) |
-| `nvidia_memory_used_bytes` | DCGM / node-exporter | >22 GiB (OOM risk) |
+| `DCGM_FI_DEV_GPU_UTIL` | DCGM exporter | <10% for >5 min (idle) |
+| `DCGM_FI_DEV_FB_USED` | DCGM exporter | >22 GiB (OOM risk) |
 | `vllm:request_success_total` | vLLM `/metrics` | Track request rate |
 | `vllm:e2e_request_latency_seconds` | vLLM `/metrics` | p99 > 30s (overloaded) |
 | `vllm:num_requests_running` | vLLM `/metrics` | Concurrency level |
 | `kube_pod_container_status_restarts_total` | kube-state-metrics | >0 (crashes) |
 
+Useful Loki queries:
+
+```text
+{namespace="llm", app="vllm"}
+{namespace="agent", app_kubernetes_io_name="agent"}
+```
+
+Tempo traces are emitted by the agent through `otel-collector.observability.svc.cluster.local:4317` when `tracing.tempo.enabled=true`.
+
 Pod OOM kills:
 ```bash
 sudo k3s kubectl get events -n llm --field-selector reason=OOMKilling
 ```
+
+## Operator Tooling
+
+`k9s` is installed at `/usr/local/bin/k9s` by the `operator_tools_offline` role. Use the K3s kubeconfig:
+
+```bash
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml k9s
+```
+
+Noninteractive validation:
+
+```bash
+k9s version --short
+```
+
+## Observability Rollback
+
+Rollback removes the observability stack and k9s without changing K3s, Argo CD, vLLM, or the agent application:
+
+```bash
+# Remove observability workloads and telemetry storage.
+sudo k3s kubectl delete namespace observability --ignore-not-found
+
+# Remove k9s from the target host.
+sudo rm -f /usr/local/bin/k9s
+```
+
+To keep observability disabled on the next playbook run, remove or comment out `operator_tools_offline` and `observability_offline` in `offline-bundle/ansible/playbooks/site.yml` before running Ansible again.
 
 ## Final Verification
 

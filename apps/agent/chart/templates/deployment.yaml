@@ -36,6 +36,16 @@ spec:
               value: {{ .Values.langfuse.publicKey | quote }}
             - name: LANGFUSE_SECRET_KEY
               value: {{ .Values.langfuse.secretKey | quote }}
+            - name: TEMPO_TRACING_ENABLED
+              value: {{ .Values.tracing.tempo.enabled | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.tracing.tempo.serviceName | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.tracing.tempo.endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ .Values.tracing.tempo.protocol | quote }}
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: {{ .Values.tracing.tempo.insecure | quote }}
           readinessProbe:
             httpGet:
               path: /readyz
@@ -46,4 +56,3 @@ spec:
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-

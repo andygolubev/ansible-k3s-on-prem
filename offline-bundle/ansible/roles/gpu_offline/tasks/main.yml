@@ -70,14 +70,36 @@
     mode: "0755"
   when: nvme_device_stat.stat.exists
 
-- name: Mount NVMe instance store
-  ansible.posix.mount:
-    path: "{{ gpu_nvme_mount }}"
-    src: "{{ gpu_nvme_device }}"
-    fstype: ext4
-    opts: defaults,nofail
-    state: mounted
+- name: Persist NVMe instance store mount
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: "^{{ gpu_nvme_device | regex_escape }}\\s+"
+    line: "{{ gpu_nvme_device }} {{ gpu_nvme_mount }} ext4 defaults,nofail 0 2"
+    owner: root
+    group: root
+    mode: "0644"
   when: nvme_device_stat.stat.exists
+
+- name: Check if NVMe instance store is mounted
+  ansible.builtin.command:
+    argv:
+      - mountpoint
+      - -q
+      - "{{ gpu_nvme_mount }}"
+  register: nvme_mountpoint_check
+  failed_when: false
+  changed_when: false
+  when: nvme_device_stat.stat.exists
+
+- name: Mount NVMe instance store
+  ansible.builtin.command:
+    argv:
+      - mount
+      - "{{ gpu_nvme_mount }}"
+  changed_when: true
+  when:
+    - nvme_device_stat.stat.exists
+    - nvme_mountpoint_check.rc != 0
 
 - name: Create NVMe model cache directory
   ansible.builtin.file:

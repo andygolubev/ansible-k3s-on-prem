@@ -20,5 +20,12 @@ langfuse:
   publicKey: ""
   secretKey: ""
 
-resources: {}
+tracing:
+  tempo:
+    enabled: true
+    serviceName: agent-chatbot
+    endpoint: otel-collector.observability.svc.cluster.local:4317
+    protocol: grpc
+    insecure: "true"
 
+resources: {}

@@ -1,0 +1,5 @@
+---
+operator_tools_payload_dir: "{{ offline_bundle_root }}/payload/tools"
+k9s_binary_src: "{{ operator_tools_payload_dir }}/k9s/k9s"
+k9s_version_file: "{{ operator_tools_payload_dir }}/k9s/VERSION"
+k9s_binary_dest: /usr/local/bin/k9s

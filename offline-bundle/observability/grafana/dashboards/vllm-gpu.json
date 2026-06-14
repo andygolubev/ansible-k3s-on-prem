@@ -1,0 +1,238 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:request_success_total[5m]))",
+          "legendFormat": "successful requests/s",
+          "refId": "A"
+        }
+      ],
+      "title": "vLLM Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99 latency",
+          "refId": "A"
+        }
+      ],
+      "title": "vLLM p99 Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(vllm:num_requests_running)",
+          "legendFormat": "running",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(vllm:num_requests_waiting)",
+          "legendFormat": "waiting",
+          "refId": "B"
+        }
+      ],
+      "title": "vLLM Queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "tps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:generation_tokens_total[5m]))",
+          "legendFormat": "generation tokens/s",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(vllm:prompt_tokens_total[5m]))",
+          "legendFormat": "prompt tokens/s",
+          "refId": "B"
+        }
+      ],
+      "title": "Token Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "avg(DCGM_FI_DEV_GPU_UTIL)",
+          "legendFormat": "gpu util",
+          "refId": "A"
+        }
+      ],
+      "title": "GPU Utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "avg(DCGM_FI_DEV_FB_USED) * 1024 * 1024",
+          "legendFormat": "gpu memory used",
+          "refId": "A"
+        }
+      ],
+      "title": "GPU Memory Used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"llm|agent\"}[1h]))",
+          "legendFormat": "restarts",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\",namespace=~\"llm|agent\"})",
+          "legendFormat": "oom killed",
+          "refId": "B"
+        }
+      ],
+      "title": "Pod Restarts And OOM",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "offline",
+    "vllm",
+    "gpu"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "vLLM GPU Operations",
+  "uid": "vllm-gpu-operations",
+  "version": 1,
+  "weekStart": ""
+}

@@ -31,6 +31,9 @@ Environment overrides:
   AGENT_IMAGE        default agent-chatbot:0.1.0
   LOCAL_REGISTRY     default localhost:5000
   CRANE_VERSION      default v0.21.6
+
+Run scripts/download-observability-artifacts.sh separately to add Prometheus,
+Grafana, Loki, Tempo, and related monitoring images.
 USAGE
 }
 

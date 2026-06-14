@@ -37,7 +37,7 @@ local files only.
               |  ansible/playbooks/site.yml                    |
               |        |                                       |
               |        v                                       |
-              |  single-node K3s + GPU + Argo CD + vLLM        |
+              |  K3s + GPU + Argo CD + observability + vLLM    |
               +------------------------------------------------+
 ```
 
@@ -67,6 +67,7 @@ ansible-k3s-on-prem/
 | Host OS                                                                    |
 |                                                                            |
 |  /usr/local/bin/k3s                    /opt/models/Qwen2.5-7B-Instruct     |
+|  /usr/local/bin/k9s                    /var/lib/rancher/k3s                |
 |  systemd:k3s                           /var/lib/offline-gitops/git         |
 |  systemd:offline-git-mirror            localhost:5000 registry endpoint    |
 |                                                                            |
@@ -92,9 +93,15 @@ ansible-k3s-on-prem/
 |  |    - imagePullPolicy: Never                                          |  |
 |  |    - requests/limits: nvidia.com/gpu: 1                              |  |
 |  |                                                                      |  |
+|  |  observability                                                       |  |
+|  |    - Prometheus, Grafana, Loki, Promtail, Tempo                      |  |
+|  |    - OpenTelemetry Collector                                         |  |
+|  |    - kube-state-metrics, node-exporter, DCGM exporter                |  |
+|  |                                                                      |  |
 |  |  agent                                                               |  |
 |  |    - FastAPI chatbot, installed by Argo CD from local Git mirror      |  |
 |  |    - calls http://vllm.llm.svc.cluster.local:8000/v1                 |  |
+|  |    - sends OTLP traces to otel-collector.observability:4317          |  |
 |  +----------------------------------------------------------------------+  |
 +----------------------------------------------------------------------------+
 ```
@@ -113,6 +120,13 @@ payload/
 |-- gitops/
 |   |-- argocd/                       Argo CD install manifests
 |   `-- images/                       images.tsv and image archives
+|-- observability/
+|   |-- VERSIONS.env
+|   |-- manifests/
+|   |-- images/
+|   `-- grafana/dashboards/
+|-- tools/
+|   `-- k9s/
 |-- gpu/
 |   |-- debs/nvidia-driver/           NVIDIA driver .deb packages
 |   |-- debs/nvidia-ctk/              NVIDIA container toolkit .deb packages
@@ -142,6 +156,8 @@ payload/
    |-- download-gpu-artifacts.sh
    |-- download-vllm-artifacts.sh
    |-- download-model-artifacts.sh
+   |-- download-operator-tools.sh
+   |-- download-observability-artifacts.sh
    `-- verify-artifacts.sh
 
 2. Copy the full project root to the isolated target
@@ -159,6 +175,8 @@ payload/
          |-- k3s_offline
          |-- gpu_offline
          |-- argocd_offline
+         |-- operator_tools_offline
+         |-- observability_offline
          `-- vllm_offline
 ```
 
@@ -193,12 +211,58 @@ site.yml
 |   |-- installs Argo CD from a local-image manifest
 |   `-- applies the app-of-apps root Application
 |
+|-- operator_tools_offline
+|   |-- verifies the k9s payload
+|   |-- installs /usr/local/bin/k9s
+|   `-- validates k9s version output
+|
+|-- observability_offline
+|   |-- imports prepared observability image archives into K3s containerd
+|   |-- pushes observability images into localhost:5000 with bundled crane
+|   |-- creates the Grafana dashboard ConfigMap
+|   |-- applies Prometheus, Grafana, Loki, Promtail, Tempo, OpenTelemetry
+|   |   Collector, kube-state-metrics, node-exporter, and DCGM manifests
+|   `-- waits for observability Deployments, DaemonSets, and Services
+|
 `-- vllm_offline
     |-- imports the vLLM image archive into K3s containerd
     |-- copies the model snapshot into /opt/models
     |-- applies llm namespace, vLLM Deployment, and Service
     |-- optionally applies ServiceMonitor when the CRD exists
     `-- validates /v1/models from inside the vLLM Deployment
+```
+
+## Observability Flow
+
+```text
+        +-------------------+       scrape        +------------------+
+        | vLLM /metrics     +-------------------->| Prometheus       |
+        | kube-state-metrics|                     | namespace:       |
+        | node-exporter     |                     | observability    |
+        | dcgm-exporter     |                     +--------+---------+
+        +-------------------+                              |
+                                                           | datasource
+                                                           v
+        +-------------------+       logs          +------------------+
+        | K3s pod logs      +-------------------->| Loki             |
+        | /var/log/pods     | promtail daemonset  | datasource       |
+        +-------------------+                     +--------+---------+
+                                                           |
+        +-------------------+       OTLP traces             |
+        | agent /chat       +-------------------->+------------------+
+        | OpenTelemetry     |                     | OTel Collector   |
+        +-------------------+                     +--------+---------+
+                                                           |
+                                                           v
+                                                  +------------------+
+                                                  | Tempo datasource |
+                                                  +--------+---------+
+                                                           |
+                                                           v
+                                                  +------------------+
+                                                  | Grafana          |
+                                                  | vLLM GPU board   |
+                                                  +------------------+
 ```
 
 ## GitOps Runtime Flow
@@ -280,6 +344,11 @@ NVMe instance store, ephemeral when present:
 In-cluster services:
   local-registry.local-registry.svc.cluster.local, plus host localhost:5000
   git-mirror.gitops.svc.cluster.local:9418
+  prometheus.observability.svc.cluster.local:9090
+  grafana.observability.svc.cluster.local:3000
+  loki.observability.svc.cluster.local:3100
+  tempo.observability.svc.cluster.local:3200
+  otel-collector.observability.svc.cluster.local:4317
   vllm.llm.svc.cluster.local:8000
   agent.agent.svc.cluster.local:8080
 ```
@@ -299,7 +368,9 @@ ansible-playbook -i offline-bundle/ansible/inventory.ini offline-bundle/ansible/
 sudo k3s kubectl get nodes -o wide
 sudo k3s kubectl get pods -A -o wide
 sudo k3s kubectl -n argocd get applications
+sudo k3s kubectl -n observability get pods
 sudo k3s kubectl -n llm get pods -o wide
 curl -fsS http://127.0.0.1:5000/v2/
 git ls-remote git://127.0.0.1/app-of-apps.git HEAD
+k9s version --short
 ```

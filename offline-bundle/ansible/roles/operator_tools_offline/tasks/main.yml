@@ -1,0 +1,42 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Verify k9s binary artifact exists
+  ansible.builtin.stat:
+    path: "{{ k9s_binary_src }}"
+  register: k9s_binary_artifact
+
+- name: Fail when k9s binary artifact is missing
+  ansible.builtin.fail:
+    msg: "Missing k9s binary artifact: {{ k9s_binary_src }}. Run scripts/download-operator-tools.sh first."
+  when: not k9s_binary_artifact.stat.exists
+
+- name: Verify k9s version metadata exists
+  ansible.builtin.stat:
+    path: "{{ k9s_version_file }}"
+  register: k9s_version_artifact
+
+- name: Fail when k9s version metadata is missing
+  ansible.builtin.fail:
+    msg: "Missing k9s version metadata: {{ k9s_version_file }}. Run scripts/download-operator-tools.sh first."
+  when: not k9s_version_artifact.stat.exists
+
+- name: Install k9s binary
+  ansible.builtin.copy:
+    src: "{{ k9s_binary_src }}"
+    dest: "{{ k9s_binary_dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Verify k9s command works
+  ansible.builtin.command:
+    argv:
+      - "{{ k9s_binary_dest }}"
+      - version
+      - --short
+  register: k9s_version_check
+  changed_when: false
+
+- name: Display k9s version
+  ansible.builtin.debug:
+    msg: "{{ k9s_version_check.stdout_lines }}"
