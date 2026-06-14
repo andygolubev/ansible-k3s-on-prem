@@ -6,9 +6,9 @@ Ansible runs inside the target host and targets `localhost` with `ansible_connec
 
 ## Supported Environment
 
-- Preparation host: Linux AMD64, or Docker running `ubuntu:26.04` with `--platform linux/amd64`
-- Target host: Ubuntu 26.04 LTS AMD64
-- Cluster: single-node K3s server
+- Preparation host: Linux AMD64 with Docker, or macOS with Docker Desktop (Intel or Apple Silicon)
+- Target host: Ubuntu 26.04 LTS AMD64 (e.g. EC2 `g5.2xlarge`)
+- Cluster: single-node K3s server with NVIDIA A10G GPU
 - Network during install: isolated, no internet access
 
 ## Payload Directory
@@ -25,68 +25,94 @@ Generated payload layout:
 
 ```text
 payload/
-  k3s/
-    k3s
-    install.sh
-    k3s-airgap-images-amd64.tar.zst
-    VERSION
-  debs/
-    ubuntu-26.04-amd64/
-      ansible-and-deps/
-        *.deb
+  k3s/                              K3s binary, install script, airgap image tarball
+  debs/ubuntu-26.04-amd64/
+    ansible-and-deps/               Ansible + dependency .deb packages
   gitops/
-    argocd/
-      VERSION
-      install.yaml
-      install-local.yaml
-    images/
-      images.tsv
-      *.tar
-  checksums.txt
+    argocd/                         Argo CD install manifest (original + local-image variant)
+    images/                         images.tsv manifest + image archives (.tar)
+  gpu/
+    debs/nvidia-driver/             NVIDIA driver .deb packages + deps
+    debs/nvidia-ctk/                NVIDIA container toolkit .deb packages + deps
+    images/nvidia-device-plugin.tar Device plugin image archive
+    device-plugin.yaml              Device plugin Kubernetes manifest
+    DEVICE_PLUGIN_VERSION
+    DEVICE_PLUGIN_IMAGE
+  vllm/
+    images/vllm-openai.tar          vLLM server image archive (~8 GB compressed)
+    VLLM_IMAGE
+  models/
+    Qwen2.5-7B-Instruct/            Model weights, tokenizer, config (~14 GB)
+  bin/                              crane binary
+  checksums.txt                     SHA256 checksums for all files
 ```
 
 ## Prepare Payload With Docker
 
-From the repository root on an internet-connected machine:
+All scripts can be run from macOS or Linux with Docker Desktop/Engine installed. No Linux VM is required.
 
-The GPU, vLLM, and model download steps require Docker and Python 3 with internet access. These are best run on a networked Linux AMD64 host rather than in Docker (see [Prepare Payload On Linux](#prepare-payload-on-linux)).
+Each script group has different requirements, so they are run in separate steps:
 
-The k3s + Ansible deb steps can run inside Docker:
+**Step 1 — k3s + Ansible debs** (needs Ubuntu 26.04 for apt; no Docker socket required):
 
 ```bash
+# From repo root
 docker run --rm \
   --platform linux/amd64 \
   -v "$PWD:/workspace" \
   -w /workspace/offline-bundle \
   ubuntu:26.04 \
   bash -lc '
-    apt-get update &&
-    apt-get install -y curl ca-certificates &&
+    apt-get update -qq &&
+    apt-get install -y --no-install-recommends curl ca-certificates python3 sudo &&
     ./scripts/download-k3s-artifacts.sh &&
-    ./scripts/download-ansible-debs.sh &&
-    ./scripts/verify-artifacts.sh &&
-    du -sh payload
+    ./scripts/download-ansible-debs.sh
   '
 ```
 
-That writes all generated files back to `offline-bundle/payload/` on the host.
-
-You can also pin a K3s version:
+**Step 2 — Argo CD + agent image** (needs Docker; runs directly on the prep host):
 
 ```bash
+cd offline-bundle
+./scripts/download-argocd-artifacts.sh
+```
+
+**Step 3 — NVIDIA GPU packages + device plugin image** (needs Ubuntu 26.04 for apt AND Docker socket for image pull):
+
+```bash
+# From repo root
 docker run --rm \
   --platform linux/amd64 \
   -v "$PWD:/workspace" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -w /workspace/offline-bundle \
   ubuntu:26.04 \
   bash -lc '
-    apt-get update &&
-    apt-get install -y curl ca-certificates &&
-    ./scripts/download-k3s-artifacts.sh --k3s-version "v1.33.3+k3s1" &&
-    ./scripts/download-ansible-debs.sh &&
-    ./scripts/download-argocd-artifacts.sh --argocd-version "v2.14.0" &&
-    ./scripts/verify-artifacts.sh
+    apt-get update -qq &&
+    apt-get install -y --no-install-recommends docker.io curl ca-certificates gpg python3 &&
+    ./scripts/download-gpu-artifacts.sh
   '
+```
+
+**Step 4 — vLLM image** (needs Docker; runs directly on the prep host):
+
+```bash
+cd offline-bundle
+./scripts/download-vllm-artifacts.sh
+```
+
+**Step 5 — Qwen2.5-7B-Instruct model** (needs Python 3; runs directly on the prep host):
+
+```bash
+cd offline-bundle
+./scripts/download-model-artifacts.sh
+```
+
+**Step 6 — Verify everything**:
+
+```bash
+cd offline-bundle
+./scripts/verify-artifacts.sh
 ```
 
 ## Prepare Payload On Linux

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Downloads the vLLM container image for offline installation.
-# Must run on an internet-connected Linux AMD64 host with Docker available.
+# Runs on any internet-connected host with Docker available (Linux, macOS).
 #
 # Downloads:
 #   payload/vllm/images/vllm-openai.tar    vLLM OpenAI-compatible server image archive
@@ -21,20 +21,13 @@ usage() {
 Usage: download-vllm-artifacts.sh
 
 Downloads the vLLM OpenAI-compatible server image for offline use.
-Must run on an internet-connected Linux AMD64 host with Docker available.
+Runs on any internet-connected host with Docker available (Linux, macOS).
 
 Environment:
   VLLM_IMAGE    Full image reference to pull (default: vllm/vllm-openai:v0.8.5)
 
 Note: The vLLM image is several GB. Ensure you have sufficient disk space.
 USAGE
-}
-
-require_linux_amd64() {
-  if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
-    echo "This script must run on Linux AMD64." >&2
-    exit 1
-  fi
 }
 
 require_command() {
@@ -60,7 +53,6 @@ for arg in "$@"; do
   esac
 done
 
-require_linux_amd64
 require_command docker
 require_command sha256sum
 
