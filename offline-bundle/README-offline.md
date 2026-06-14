@@ -90,6 +90,8 @@ cd offline-bundle
 # From repo root
 docker run --rm \
   --platform linux/amd64 \
+  -e HOST_UID="$(id -u)" \
+  -e HOST_GID="$(id -g)" \
   -v "$PWD:/workspace" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -w /workspace/offline-bundle \
@@ -97,7 +99,8 @@ docker run --rm \
   bash -lc '
     apt-get update -qq &&
     apt-get install -y --no-install-recommends docker.io curl ca-certificates gpg python3 &&
-    ./scripts/download-gpu-artifacts.sh
+    ./scripts/download-gpu-artifacts.sh &&
+    chown -R "${HOST_UID}:${HOST_GID}" payload/gpu
   '
 ```
 

@@ -89,6 +89,12 @@ generate_checksums() {
   )
 }
 
+restore_payload_ownership() {
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    chown -R "$SUDO_USER" "$PAYLOAD_DIR"
+  fi
+}
+
 download_deb_packages() {
   local dest_dir="$1"
   shift
@@ -228,6 +234,7 @@ echo "$DEVICE_PLUGIN_VERSION" > "$GPU_DIR/DEVICE_PLUGIN_VERSION"
 # Checksums
 # ---------------------------------------------------------------------------
 generate_checksums
+restore_payload_ownership
 
 echo ""
 echo "NVIDIA GPU artifacts downloaded to $GPU_DIR"
