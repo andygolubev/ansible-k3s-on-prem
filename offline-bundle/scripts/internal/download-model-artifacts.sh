@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Downloads the Qwen2.5-7B-Instruct model snapshot from Hugging Face for offline use.
-# Must run on an internet-connected Linux AMD64 host with Python 3 and pip available.
+# Must run on an internet-connected Linux AMD64 host with Python 3 and venv support.
 #
 # Downloads:
 #   payload/models/Qwen2.5-7B-Instruct/   Full model snapshot (weights, tokenizer, config)
@@ -24,7 +24,7 @@ usage() {
 Usage: download-model-artifacts.sh [--model MODEL_ID] [--revision REV]
 
 Downloads a Hugging Face model snapshot for offline vLLM use.
-Requires: python3, pip (installs huggingface_hub if needed).
+Requires: python3 with venv support (installs huggingface_hub in a temporary venv).
 
 Options:
   --model MODEL_ID    HF model repo ID (default: Qwen/Qwen2.5-7B-Instruct)
@@ -78,10 +78,20 @@ done
 require_command "$PYTHON"
 require_command sha256sum
 
-# Ensure huggingface_hub is available
+# Keep downloaded Python packages out of the host Python installation. Recent
+# Ubuntu releases mark the system interpreter as externally managed, so even a
+# present pip cannot safely install packages into it.
 if ! "$PYTHON" -c "import huggingface_hub" 2>/dev/null; then
-  echo "Installing huggingface_hub..."
-  "$PYTHON" -m pip install --quiet "huggingface_hub[cli]>=0.26"
+  echo "Creating a temporary Python environment for huggingface_hub..."
+  VENV_DIR="$(mktemp -d)"
+  trap 'rm -rf "$VENV_DIR"' EXIT
+  if ! "$PYTHON" -m venv "$VENV_DIR"; then
+    echo "Unable to create a Python virtual environment." >&2
+    echo "Install the python3-venv package and retry." >&2
+    exit 1
+  fi
+  PYTHON="$VENV_DIR/bin/python"
+  "$PYTHON" -m pip install --quiet "huggingface_hub>=0.26"
 fi
 
 # Derive local directory name from model ID (repo name only)
