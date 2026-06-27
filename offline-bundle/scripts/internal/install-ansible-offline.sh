@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEB_DIR="$BUNDLE_DIR/payload/debs/ubuntu-26.04-amd64/ansible-and-deps"
 
 if [[ ! -d "$DEB_DIR" ]]; then
@@ -20,7 +20,7 @@ if [[ "${#DEBS[@]}" -eq 0 ]]; then
 fi
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-  echo "Run this script with sudo: sudo ./scripts/install-ansible-offline.sh" >&2
+  echo "Run this script with sudo: sudo ./scripts/internal/install-ansible-offline.sh" >&2
   exit 1
 fi
 

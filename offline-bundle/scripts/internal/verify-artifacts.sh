@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
 
 required_files=(
@@ -103,7 +103,7 @@ if [[ -f "$BUNDLE_DIR/payload/gpu/DEVICE_PLUGIN_VERSION" ]]; then
     fi
   done
   if [[ "$gpu_missing" -ne 0 ]]; then
-    echo "GPU artifacts incomplete. Run scripts/download-gpu-artifacts.sh first." >&2
+    echo "GPU artifacts incomplete. Run scripts/download-all-artifacts.sh first." >&2
     missing=1
   fi
 else

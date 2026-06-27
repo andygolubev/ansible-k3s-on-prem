@@ -100,8 +100,8 @@ docker run --rm \
   bash -lc '
     apt-get update -qq &&
     apt-get install -y --no-install-recommends curl ca-certificates python3 sudo &&
-    ./scripts/download-k3s-artifacts.sh &&
-    ./scripts/download-ansible-debs.sh
+    ./scripts/internal/download-k3s-artifacts.sh &&
+    ./scripts/internal/download-ansible-debs.sh
   '
 ```
 
@@ -109,7 +109,7 @@ docker run --rm \
 
 ```bash
 cd offline-bundle
-./scripts/download-argocd-artifacts.sh
+./scripts/internal/download-argocd-artifacts.sh
 ```
 
 **Step 3 — NVIDIA GPU packages + device plugin image** (needs Ubuntu 26.04 for apt AND Docker socket for image pull):
@@ -127,7 +127,7 @@ docker run --rm \
   bash -lc '
     apt-get update -qq &&
     apt-get install -y --no-install-recommends docker.io curl ca-certificates gpg python3 &&
-    ./scripts/download-gpu-artifacts.sh &&
+    ./scripts/internal/download-gpu-artifacts.sh &&
     chown -R "${HOST_UID}:${HOST_GID}" payload/gpu
   '
 ```
@@ -136,35 +136,35 @@ docker run --rm \
 
 ```bash
 cd offline-bundle
-./scripts/download-vllm-artifacts.sh
+./scripts/internal/download-vllm-artifacts.sh
 ```
 
 **Step 5 — Qwen2.5-7B-Instruct model** (needs Python 3; runs directly on the prep host):
 
 ```bash
 cd offline-bundle
-./scripts/download-model-artifacts.sh
+./scripts/internal/download-model-artifacts.sh
 ```
 
 **Step 6 — operator tools** (needs curl/tar; runs directly on the prep host):
 
 ```bash
 cd offline-bundle
-./scripts/download-operator-tools.sh
+./scripts/internal/download-operator-tools.sh
 ```
 
 **Step 7 — observability stack** (needs Docker; runs directly on the prep host):
 
 ```bash
 cd offline-bundle
-./scripts/download-observability-artifacts.sh
+./scripts/internal/download-observability-artifacts.sh
 ```
 
 **Step 8 — Verify everything**:
 
 ```bash
 cd offline-bundle
-./scripts/verify-artifacts.sh
+./scripts/internal/verify-artifacts.sh
 ```
 
 ## Prepare Payload On Linux
@@ -175,25 +175,25 @@ On a networked Ubuntu 26.04 AMD64 host with Docker installed:
 cd offline-bundle
 
 # K3s, Ansible debs, Argo CD
-./scripts/download-k3s-artifacts.sh
-./scripts/download-ansible-debs.sh
-./scripts/download-argocd-artifacts.sh
+./scripts/internal/download-k3s-artifacts.sh
+./scripts/internal/download-ansible-debs.sh
+./scripts/internal/download-argocd-artifacts.sh
 
 # GPU packages + device plugin (Ubuntu 26.04 + Docker required)
-sudo ./scripts/download-gpu-artifacts.sh
+sudo ./scripts/internal/download-gpu-artifacts.sh
 
 # vLLM image (Docker required, ~20 GB download)
-./scripts/download-vllm-artifacts.sh
+./scripts/internal/download-vllm-artifacts.sh
 
 # Qwen2.5-7B-Instruct model (~15 GB download)
-./scripts/download-model-artifacts.sh
+./scripts/internal/download-model-artifacts.sh
 
 # Operator tools and observability (Docker required for observability images)
-./scripts/download-operator-tools.sh
-./scripts/download-observability-artifacts.sh
+./scripts/internal/download-operator-tools.sh
+./scripts/internal/download-observability-artifacts.sh
 
 # Verify everything
-./scripts/verify-artifacts.sh
+./scripts/internal/verify-artifacts.sh
 ```
 
 `download-k3s-artifacts.sh` follows the K3s GitHub releases page and downloads the latest release at execution time. The K3s binary and air-gap image tarball always use the same resolved version:
@@ -252,7 +252,7 @@ payload/checksums.txt
 If K3s version resolution fails, rerun with verbose output:
 
 ```bash
-VERBOSE=1 ./scripts/download-k3s-artifacts.sh
+VERBOSE=1 ./scripts/internal/download-k3s-artifacts.sh
 ```
 
 ## Copy Bundle To The Target
@@ -309,7 +309,7 @@ Inside the target:
 
 ```bash
 cd "$HOME/ansible-k3s-on-prem/offline-bundle"
-./scripts/verify-artifacts.sh
+./scripts/internal/verify-artifacts.sh
 ```
 
 This checks required files, executable bits for K3s scripts, and `payload/checksums.txt`.
@@ -320,7 +320,7 @@ Ansible cannot install itself through Ansible. Run the one shell bootstrap step:
 
 ```bash
 cd "$HOME/ansible-k3s-on-prem/offline-bundle"
-sudo ./scripts/install-ansible-offline.sh
+sudo ./scripts/internal/install-ansible-offline.sh
 ```
 
 The bootstrap script installs only local `.deb` packages from:

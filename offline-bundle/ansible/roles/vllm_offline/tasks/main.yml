@@ -10,7 +10,7 @@
 
 - name: Fail when vLLM image archive is missing
   ansible.builtin.fail:
-    msg: "Missing vLLM image archive: {{ vllm_image_archive }}. Run scripts/download-vllm-artifacts.sh first."
+    msg: "Missing vLLM image archive: {{ vllm_image_archive }}. Run scripts/download-all-artifacts.sh first."
   when: not vllm_image_stat.stat.exists
 
 - name: Verify model snapshot exists
@@ -20,7 +20,7 @@
 
 - name: Fail when model snapshot is missing
   ansible.builtin.fail:
-    msg: "Missing model snapshot: {{ vllm_models_src_dir }}/{{ vllm_model_name }}. Run scripts/download-model-artifacts.sh first."
+    msg: "Missing model snapshot: {{ vllm_models_src_dir }}/{{ vllm_model_name }}. Run scripts/download-all-artifacts.sh first."
   when: not model_src_stat.stat.exists
 
 # ---------------------------------------------------------------------------

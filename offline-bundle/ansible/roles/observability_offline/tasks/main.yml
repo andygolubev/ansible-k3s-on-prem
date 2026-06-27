@@ -7,7 +7,7 @@
 
 - name: Fail when observability image metadata is missing
   ansible.builtin.fail:
-    msg: "Missing observability image metadata: {{ observability_images_manifest }}. Run scripts/download-observability-artifacts.sh first."
+    msg: "Missing observability image metadata: {{ observability_images_manifest }}. Run scripts/download-all-artifacts.sh first."
   when: not observability_images_metadata.stat.exists
 
 - name: Verify observability local manifest exists
@@ -17,7 +17,7 @@
 
 - name: Fail when observability local manifest is missing
   ansible.builtin.fail:
-    msg: "Missing observability local manifest: {{ observability_manifest_src }}. Run scripts/download-observability-artifacts.sh first."
+    msg: "Missing observability local manifest: {{ observability_manifest_src }}. Run scripts/download-all-artifacts.sh first."
   when: not observability_manifest.stat.exists
 
 - name: Verify observability version metadata exists
@@ -27,7 +27,7 @@
 
 - name: Fail when observability version metadata is missing
   ansible.builtin.fail:
-    msg: "Missing observability version metadata: {{ observability_versions_file }}. Run scripts/download-observability-artifacts.sh first."
+    msg: "Missing observability version metadata: {{ observability_versions_file }}. Run scripts/download-all-artifacts.sh first."
   when: not observability_versions.stat.exists
 
 - name: Verify vLLM Grafana dashboard exists
@@ -37,7 +37,7 @@
 
 - name: Fail when vLLM Grafana dashboard is missing
   ansible.builtin.fail:
-    msg: "Missing vLLM Grafana dashboard: {{ observability_dashboards_dir }}/vllm-gpu.json. Run scripts/download-observability-artifacts.sh first."
+    msg: "Missing vLLM Grafana dashboard: {{ observability_dashboards_dir }}/vllm-gpu.json. Run scripts/download-all-artifacts.sh first."
   when: not observability_vllm_dashboard.stat.exists
 
 - name: Verify observability image archives exist

@@ -16,7 +16,7 @@ local files only.
               +------------------------------------------------+
               | macOS/Linux + Docker                           |
               |                                                |
-              |  offline-bundle/scripts/download-*.sh          |
+              |  offline-bundle/scripts/internal/download-*.sh          |
               |        |                                       |
               |        v                                       |
               |  offline-bundle/payload/                       |
@@ -150,15 +150,8 @@ payload/
 ```text
 1. Prepare artifacts on a connected host
    |
-   |-- download-k3s-artifacts.sh
-   |-- download-ansible-debs.sh
-   |-- download-argocd-artifacts.sh
-   |-- download-gpu-artifacts.sh
-   |-- download-vllm-artifacts.sh
-   |-- download-model-artifacts.sh
-   |-- download-operator-tools.sh
-   |-- download-observability-artifacts.sh
-   `-- verify-artifacts.sh
+   `-- offline-bundle/scripts/download-all-artifacts.sh
+       `-- invokes scripts/internal/* and verifies the complete payload
 
 2. Copy the self-contained offline-bundle/ directory to the isolated target
    |
@@ -166,7 +159,7 @@ payload/
 
 3. Bootstrap Ansible from local .deb files
    |
-   `-- sudo offline-bundle/scripts/install-ansible-offline.sh
+   `-- sudo offline-bundle/scripts/internal/install-ansible-offline.sh
 
 4. Run local Ansible against localhost
    |
@@ -362,8 +355,8 @@ Use `offline-bundle/VALIDATION.md` for the full validation checklist. The core
 checks are:
 
 ```text
-offline-bundle/scripts/verify-artifacts.sh
-sudo offline-bundle/scripts/install-ansible-offline.sh
+offline-bundle/scripts/internal/verify-artifacts.sh
+sudo offline-bundle/scripts/internal/install-ansible-offline.sh
 ansible-playbook -i offline-bundle/ansible/inventory.ini offline-bundle/ansible/playbooks/site.yml
 sudo k3s kubectl get nodes -o wide
 sudo k3s kubectl get pods -A -o wide

@@ -7,7 +7,7 @@
 
 - name: Fail when GitOps image metadata is missing
   ansible.builtin.fail:
-    msg: "Missing GitOps image metadata: {{ gitops_images_manifest }}. Run scripts/download-argocd-artifacts.sh first."
+    msg: "Missing GitOps image metadata: {{ gitops_images_manifest }}. Run scripts/download-all-artifacts.sh first."
   when: not gitops_images_metadata.stat.exists
 
 - name: Verify Argo CD manifest exists
@@ -47,7 +47,7 @@
 
 - name: Fail when crane binary is missing
   ansible.builtin.fail:
-    msg: "Missing crane binary: {{ offline_bundle_root }}/payload/bin/crane. Run scripts/download-argocd-artifacts.sh first."
+    msg: "Missing crane binary: {{ offline_bundle_root }}/payload/bin/crane. Run scripts/download-all-artifacts.sh first."
   when: not crane_binary.stat.executable
 
 - name: Import prepared image archives into K3s containerd

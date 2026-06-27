@@ -10,7 +10,7 @@
 
 - name: Fail when NVIDIA driver debs are missing
   ansible.builtin.fail:
-    msg: "Missing NVIDIA driver .deb directory: {{ gpu_driver_deb_dir }}. Run scripts/download-gpu-artifacts.sh first."
+    msg: "Missing NVIDIA driver .deb directory: {{ gpu_driver_deb_dir }}. Run scripts/download-all-artifacts.sh first."
   when: not gpu_driver_deb_stat.stat.exists
 
 - name: Verify NVIDIA container toolkit deb directory exists
@@ -20,7 +20,7 @@
 
 - name: Fail when NVIDIA container toolkit debs are missing
   ansible.builtin.fail:
-    msg: "Missing NVIDIA container toolkit .deb directory: {{ gpu_ctk_deb_dir }}. Run scripts/download-gpu-artifacts.sh first."
+    msg: "Missing NVIDIA container toolkit .deb directory: {{ gpu_ctk_deb_dir }}. Run scripts/download-all-artifacts.sh first."
   when: not gpu_ctk_deb_stat.stat.exists
 
 - name: Verify device plugin image archive exists
@@ -30,7 +30,7 @@
 
 - name: Fail when device plugin image archive is missing
   ansible.builtin.fail:
-    msg: "Missing device plugin image archive: {{ gpu_device_plugin_image_archive }}. Run scripts/download-gpu-artifacts.sh first."
+    msg: "Missing device plugin image archive: {{ gpu_device_plugin_image_archive }}. Run scripts/download-all-artifacts.sh first."
   when: not gpu_device_plugin_image_stat.stat.exists
 
 - name: Verify device plugin manifest exists
@@ -40,7 +40,7 @@
 
 - name: Fail when device plugin manifest is missing
   ansible.builtin.fail:
-    msg: "Missing device plugin manifest: {{ gpu_device_plugin_manifest_src }}. Run scripts/download-gpu-artifacts.sh first."
+    msg: "Missing device plugin manifest: {{ gpu_device_plugin_manifest_src }}. Run scripts/download-all-artifacts.sh first."
   when: not gpu_device_plugin_manifest_stat.stat.exists
 
 - name: Verify CUDA validation image archive exists
@@ -53,7 +53,7 @@
     msg: >-
       Missing CUDA validation image archive:
       {{ gpu_cuda_validation_image_archive }}. Run
-      scripts/download-vllm-artifacts.sh first.
+      scripts/download-all-artifacts.sh first.
   when: not gpu_cuda_validation_image_stat.stat.exists
 
 # ---------------------------------------------------------------------------

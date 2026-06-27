@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
 GITOPS_DIR="$PAYLOAD_DIR/gitops"
 ARGOCD_DIR="$GITOPS_DIR/argocd"
@@ -31,7 +31,7 @@ Environment overrides:
   LOCAL_REGISTRY     default localhost:5000
   CRANE_VERSION      default v0.21.6
 
-Run scripts/download-observability-artifacts.sh separately to add Prometheus,
+Run scripts/internal/download-observability-artifacts.sh separately to add Prometheus,
 Grafana, Loki, Tempo, and related monitoring images.
 USAGE
 }

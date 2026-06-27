@@ -3,15 +3,15 @@
 Validated locally:
 
 ```bash
-bash -n offline-bundle/scripts/download-k3s-artifacts.sh \
-  offline-bundle/scripts/download-ansible-debs.sh \
-  offline-bundle/scripts/download-gpu-artifacts.sh \
-  offline-bundle/scripts/download-vllm-artifacts.sh \
-  offline-bundle/scripts/download-model-artifacts.sh \
-  offline-bundle/scripts/download-operator-tools.sh \
-  offline-bundle/scripts/download-observability-artifacts.sh \
-  offline-bundle/scripts/install-ansible-offline.sh \
-  offline-bundle/scripts/verify-artifacts.sh
+bash -n offline-bundle/scripts/internal/download-k3s-artifacts.sh \
+  offline-bundle/scripts/internal/download-ansible-debs.sh \
+  offline-bundle/scripts/internal/download-gpu-artifacts.sh \
+  offline-bundle/scripts/internal/download-vllm-artifacts.sh \
+  offline-bundle/scripts/internal/download-model-artifacts.sh \
+  offline-bundle/scripts/internal/download-operator-tools.sh \
+  offline-bundle/scripts/internal/download-observability-artifacts.sh \
+  offline-bundle/scripts/internal/install-ansible-offline.sh \
+  offline-bundle/scripts/internal/verify-artifacts.sh
 
 cd offline-bundle/ansible
 ANSIBLE_HOME=../../.ansible-home \
@@ -30,10 +30,10 @@ docker run --rm \
   bash -lc '
     apt-get update &&
     apt-get install -y curl ca-certificates &&
-    ./scripts/download-k3s-artifacts.sh &&
-    ./scripts/download-ansible-debs.sh &&
-    ./scripts/download-argocd-artifacts.sh &&
-    ./scripts/verify-artifacts.sh
+    ./scripts/internal/download-k3s-artifacts.sh &&
+    ./scripts/internal/download-ansible-debs.sh &&
+    ./scripts/internal/download-argocd-artifacts.sh &&
+    ./scripts/internal/verify-artifacts.sh
   '
 ```
 
@@ -41,10 +41,10 @@ Or prepare it on a networked Ubuntu 26.04 AMD64 host:
 
 ```bash
 cd offline-bundle
-./scripts/download-k3s-artifacts.sh
-./scripts/download-ansible-debs.sh
-./scripts/download-argocd-artifacts.sh
-./scripts/verify-artifacts.sh
+./scripts/internal/download-k3s-artifacts.sh
+./scripts/internal/download-ansible-debs.sh
+./scripts/internal/download-argocd-artifacts.sh
+./scripts/internal/verify-artifacts.sh
 ```
 
 `verify-artifacts.sh` requires real K3s artifacts, Ubuntu 26.04 AMD64 `.deb` packages, GitOps/Argo CD image artifacts, app source folders, and `payload/checksums.txt`.
@@ -53,8 +53,8 @@ Validated on an isolated Ubuntu 26.04 AMD64 EC2 target:
 
 ```bash
 cd "$HOME/ansible-k3s-on-prem/offline-bundle"
-./scripts/verify-artifacts.sh
-sudo ./scripts/install-ansible-offline.sh
+./scripts/internal/verify-artifacts.sh
+sudo ./scripts/internal/install-ansible-offline.sh
 
 cd "$HOME/ansible-k3s-on-prem/offline-bundle/ansible"
 ansible-playbook -i inventory.ini playbooks/site.yml
@@ -276,7 +276,7 @@ sudo k3s ctr images list | grep k8s-device-plugin
 
 ```bash
 cd "$HOME/ansible-k3s-on-prem/offline-bundle"
-./scripts/verify-artifacts.sh
+./scripts/internal/verify-artifacts.sh
 # Expected: "Offline bundle artifacts verified." with no errors
 ```
 

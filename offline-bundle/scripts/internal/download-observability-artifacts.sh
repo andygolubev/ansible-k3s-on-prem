@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
 OBS_SRC_DIR="$BUNDLE_DIR/observability"
 OBS_DIR="$PAYLOAD_DIR/observability"

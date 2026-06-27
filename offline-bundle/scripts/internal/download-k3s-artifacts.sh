@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
 K3S_DIR="$PAYLOAD_DIR/k3s"
 K3S_LATEST_URL="${K3S_LATEST_URL:-https://github.com/k3s-io/k3s/releases/latest}"
