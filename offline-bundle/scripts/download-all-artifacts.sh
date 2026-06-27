@@ -58,25 +58,26 @@ run_in_docker() {
     exit 1
   fi
 
-  local -a env_args=()
+  local -a docker_args=(
+    run --rm --platform linux/amd64
+    --mount "type=bind,src=$BUNDLE_DIR,dst=/workspace/offline-bundle"
+    --mount "type=bind,src=$socket_path,dst=/var/run/docker.sock"
+  )
   local name
   for name in K3S_VERSION K9S_VERSION VLLM_IMAGE CUDA_VALIDATION_IMAGE \
     MODEL_ID MODEL_REVISION HF_TOKEN NVIDIA_DRIVER_BRANCH DRIVER_PACKAGES \
     CTK_PACKAGES DEVICE_PLUGIN_VERSION DEVICE_PLUGIN_IMAGE ARGOCD_VERSION \
     CRANE_VERSION AGENT_IMAGE GIT_MIRROR_IMAGE REGISTRY_IMAGE LOCAL_REGISTRY; do
-    printenv "$name" >/dev/null 2>&1 && env_args+=(--env "$name")
+    printenv "$name" >/dev/null 2>&1 && docker_args+=(--env "$name")
   done
 
   echo "Starting Ubuntu 26.04 AMD64 downloader in Docker..."
-  docker run --rm --platform linux/amd64 \
-    --mount "type=bind,src=$BUNDLE_DIR,dst=/workspace/offline-bundle" \
-    --mount "type=bind,src=$socket_path,dst=/var/run/docker.sock" \
-    "${env_args[@]}" \
+  docker "${docker_args[@]}" \
     ubuntu:26.04 bash -c '
       set -e
       export DEBIAN_FRONTEND=noninteractive
       apt-get update
-      apt-get install -y --no-install-recommends ca-certificates curl docker.io findutils python3 sudo
+      apt-get install -y --no-install-recommends ca-certificates curl docker.io findutils gnupg python3 sudo
       exec /workspace/offline-bundle/scripts/download-all-artifacts.sh "$@"
     ' bash "$@"
 }

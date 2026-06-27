@@ -166,6 +166,7 @@ require_command apt-get
 require_command apt-cache
 require_command curl
 require_command docker
+require_command gpg
 require_command sha256sum
 
 mkdir -p "$DRIVER_DEB_DIR" "$CTK_DEB_DIR" "$IMAGES_DIR"
