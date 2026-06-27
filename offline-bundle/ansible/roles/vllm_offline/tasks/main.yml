@@ -166,16 +166,23 @@
   changed_when: false
 
 - name: Verify vLLM /health endpoint
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:8000/health"
-    status_code: 200
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vllm_namespace }}"
+      - exec
+      - deployment/vllm
+      - --
+      - curl
+      - -fsS
+      - http://localhost:8000/health
   register: vllm_health
+  changed_when: false
   retries: "{{ vllm_ready_retries }}"
   delay: "{{ vllm_ready_delay }}"
-  until: vllm_health.status == 200
-  # Requires kubectl port-forward or direct node access on port 8000;
-  # on a single-node cluster the pod IP is reachable from the host.
-  ignore_errors: true
+  until: vllm_health.rc == 0
 
 - name: Verify vLLM /v1/models endpoint
   ansible.builtin.command:

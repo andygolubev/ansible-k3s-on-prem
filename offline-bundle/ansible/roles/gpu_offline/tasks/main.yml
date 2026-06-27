@@ -518,6 +518,35 @@
     msg: "Node does not advertise nvidia.com/gpu allocatable capacity. Got: {{ gpu_allocatable.stdout | trim }}"
   when: gpu_allocatable.stdout | trim | int < 1
 
+- name: Check whether an existing vLLM deployment owns the single GPU
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - llm
+      - get
+      - deployment
+      - vllm
+      - -o
+      - jsonpath={.spec.template.spec.containers[0].resources.limits.nvidia\.com/gpu}
+  register: existing_vllm_gpu_claim
+  failed_when: false
+  changed_when: false
+
+- name: Decide whether a standalone GPU validation pod is required
+  ansible.builtin.set_fact:
+    gpu_validation_pod_required: >-
+      {{ existing_vllm_gpu_claim.rc != 0 or
+         (existing_vllm_gpu_claim.stdout | default('0') | trim | int) < 1 }}
+
+- name: Report existing GPU workload validation
+  ansible.builtin.debug:
+    msg: >-
+      The existing vLLM deployment already claims the node's single GPU;
+      skipping the standalone validation pod on this rerun.
+  when: not (gpu_validation_pod_required | bool)
+
 - name: Deploy GPU validation pod
   ansible.builtin.copy:
     dest: "{{ gpu_validation_pod_manifest_dest }}"
@@ -543,6 +572,7 @@
                 nvidia.com/gpu: "1"
               requests:
                 nvidia.com/gpu: "1"
+  when: gpu_validation_pod_required | bool
 
 - name: Apply GPU validation pod
   ansible.builtin.command:
@@ -553,6 +583,7 @@
       - -f
       - "{{ gpu_validation_pod_manifest_dest }}"
   changed_when: true
+  when: gpu_validation_pod_required | bool
 
 - name: Wait for GPU validation pod to complete
   ansible.builtin.shell: |
@@ -572,6 +603,7 @@
   changed_when: false
   retries: "{{ gpu_validation_retries }}"
   delay: "{{ gpu_validation_delay }}"
+  when: gpu_validation_pod_required | bool
 
 - name: Show GPU validation pod logs
   ansible.builtin.command:
@@ -584,10 +616,12 @@
       - gpu-validation
   changed_when: false
   register: gpu_validation_logs
+  when: gpu_validation_pod_required | bool
 
 - name: Display GPU validation result
   ansible.builtin.debug:
     msg: "{{ gpu_validation_logs.stdout_lines }}"
+  when: gpu_validation_pod_required | bool
 
 - name: Clean up GPU validation pod
   ansible.builtin.command:
@@ -600,3 +634,4 @@
       - pod/gpu-validation
       - --ignore-not-found=true
   changed_when: true
+  when: gpu_validation_pod_required | bool

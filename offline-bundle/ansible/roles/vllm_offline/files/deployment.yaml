@@ -9,6 +9,9 @@ metadata:
     app.kubernetes.io/managed-by: offline-bundle
 spec:
   replicas: 1
+  # A rolling update cannot schedule a second replica when the node has one GPU.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: vllm
@@ -59,7 +62,7 @@ spec:
             # Kubernetes injects VLLM_PORT=tcp://... for a Service named vllm,
             # but vLLM expects this internal worker port to be an integer.
             - name: VLLM_PORT
-              value: "0"
+              value: "29500"
             # Fully offline: disable all Hugging Face network access
             - name: HF_HUB_OFFLINE
               value: "1"
