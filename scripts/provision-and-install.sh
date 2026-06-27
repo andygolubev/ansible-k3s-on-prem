@@ -66,7 +66,7 @@ if [[ -z "${SSH_CIDR}" ]]; then
 fi
 
 echo "Verifying the prepared offline payload..."
-"${PROJECT_ROOT}/offline-bundle/scripts/verify-artifacts.sh"
+"${PROJECT_ROOT}/offline-bundle/scripts/internal/verify-artifacts.sh"
 
 required_full_stack_artifacts=(
   "offline-bundle/payload/tools/k9s/VERSION"

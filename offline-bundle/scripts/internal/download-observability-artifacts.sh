@@ -38,6 +38,7 @@ sanitize_image() {
 }
 
 generate_checksums() {
+  [[ "${DEFER_CHECKSUMS:-0}" == "1" ]] && return
   (
     cd "$PAYLOAD_DIR"
     find . -type f ! -name checksums.txt -print0 \

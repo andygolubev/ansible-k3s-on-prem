@@ -167,11 +167,13 @@ docker tag "$AGENT_IMAGE" "$LOCAL_REGISTRY/$AGENT_IMAGE"
 docker save "$AGENT_IMAGE" "$LOCAL_REGISTRY/$AGENT_IMAGE" -o "$IMAGES_DIR/$(sanitize_image "$AGENT_IMAGE").tar"
 printf '%s\t%s\t%s\n' "$AGENT_IMAGE" "$LOCAL_REGISTRY/$AGENT_IMAGE" "payload/gitops/images/$(sanitize_image "$AGENT_IMAGE").tar" >> "$IMAGES_DIR/images.tsv"
 
-(
-  cd "$PAYLOAD_DIR"
-  find . -type f ! -name checksums.txt -print0 \
-    | sort -z \
-    | xargs -0 --no-run-if-empty sha256sum > checksums.txt
-)
+if [[ "${DEFER_CHECKSUMS:-0}" != "1" ]]; then
+  (
+    cd "$PAYLOAD_DIR"
+    find . -type f ! -name checksums.txt -print0 \
+      | sort -z \
+      | xargs -0 --no-run-if-empty sha256sum > checksums.txt
+  )
+fi
 
 echo "Downloaded Argo CD $ARGOCD_VERSION and wrote offline GitOps payload to $GITOPS_DIR"

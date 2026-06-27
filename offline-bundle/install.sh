@@ -53,7 +53,7 @@ stage "1/5 Preflight checks"
 source /etc/os-release
 [[ "${ID:-}" == "ubuntu" ]] || die "Unsupported OS: ${ID:-unknown}; expected Ubuntu."
 [[ "${VERSION_ID:-}" == "26.04" ]] || die "Unsupported Ubuntu version: ${VERSION_ID:-unknown}; expected 26.04."
-[[ -x "${BUNDLE_ROOT}/scripts/verify-artifacts.sh" ]] || die "Offline bundle not found beside install.sh."
+[[ -x "${BUNDLE_ROOT}/scripts/internal/verify-artifacts.sh" ]] || die "Offline bundle not found beside install.sh."
 [[ -f "${BUNDLE_ROOT}/payload/tools/k9s/k9s" ]] || die "k9s payload is missing."
 [[ -f "${BUNDLE_ROOT}/payload/observability/images/images.tsv" ]] || die "Observability payload is missing."
 available_kib="$(df -Pk "${BUNDLE_ROOT}" | awk 'NR == 2 {print $4}')"
@@ -65,11 +65,11 @@ log "Free space on target filesystem: $((available_kib / 1024 / 1024)) GiB"
 
 stage "2/5 Verify offline payload checksums"
 log "Checking every bundled package, image, model file, and manifest. This can take several minutes."
-"${BUNDLE_ROOT}/scripts/verify-artifacts.sh"
+"${BUNDLE_ROOT}/scripts/internal/verify-artifacts.sh"
 
 stage "3/5 Bootstrap Ansible from local packages"
 log "Installing Ansible without contacting package repositories."
-"${BUNDLE_ROOT}/scripts/install-ansible-offline.sh"
+"${BUNDLE_ROOT}/scripts/internal/install-ansible-offline.sh"
 ansible-playbook --version | sed -n '1,2p'
 
 stage "4/5 Install the complete stack"

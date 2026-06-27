@@ -25,6 +25,28 @@ GitOps definitions, and application source stay outside `payload/` directly
 under `offline-bundle/`. You can delete `payload/` and regenerate it with the
 download scripts.
 
+### Download everything with one command
+
+The recommended preparation path is the aggregate downloader. Run it on an
+internet-connected **Ubuntu 26.04 AMD64** machine with Docker running and at
+least 50 GB free:
+
+```bash
+cd offline-bundle
+./scripts/download-all-artifacts.sh
+```
+
+To discard the current generated payload and rebuild it completely:
+
+```bash
+./scripts/download-all-artifacts.sh --clean
+```
+
+It invokes all specialized downloaders in order, hashes the complete payload
+only once at the end, and runs `verify-artifacts.sh`. The individual scripts
+below remain useful for refreshing one artifact group. `payload/` is generated
+and gitignored; do not place version-controlled source or manifests there.
+
 Generated payload layout:
 
 ```text
