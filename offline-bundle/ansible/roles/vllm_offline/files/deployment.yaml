@@ -23,6 +23,7 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       # Node scheduling — GPU node only
+      runtimeClassName: nvidia
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -55,6 +56,10 @@ spec:
             - --served-model-name
             - Qwen2.5-7B-Instruct
           env:
+            # Kubernetes injects VLLM_PORT=tcp://... for a Service named vllm,
+            # but vLLM expects this internal worker port to be an integer.
+            - name: VLLM_PORT
+              value: "0"
             # Fully offline: disable all Hugging Face network access
             - name: HF_HUB_OFFLINE
               value: "1"

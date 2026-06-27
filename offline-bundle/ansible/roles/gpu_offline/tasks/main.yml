@@ -43,6 +43,19 @@
     msg: "Missing device plugin manifest: {{ gpu_device_plugin_manifest_src }}. Run scripts/download-gpu-artifacts.sh first."
   when: not gpu_device_plugin_manifest_stat.stat.exists
 
+- name: Verify CUDA validation image archive exists
+  ansible.builtin.stat:
+    path: "{{ gpu_cuda_validation_image_archive }}"
+  register: gpu_cuda_validation_image_stat
+
+- name: Fail when CUDA validation image archive is missing
+  ansible.builtin.fail:
+    msg: >-
+      Missing CUDA validation image archive:
+      {{ gpu_cuda_validation_image_archive }}. Run
+      scripts/download-vllm-artifacts.sh first.
+  when: not gpu_cuda_validation_image_stat.stat.exists
+
 # ---------------------------------------------------------------------------
 # NVMe instance store setup
 # ---------------------------------------------------------------------------
@@ -310,43 +323,38 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
   changed_when: true
+  notify: Restart k3s
 
 # ---------------------------------------------------------------------------
-# Configure NVIDIA runtime for K3s containerd
+# Configure NVIDIA runtime for K3s containerd. K3s discovers supported runtime
+# binaries on PATH and generates the complete containerd configuration. A
+# partial config.toml.tmpl replaces (rather than merges with) that generated
+# configuration and breaks K3s's CNI paths, so remove the legacy template.
 # ---------------------------------------------------------------------------
-- name: Create K3s containerd config directory
+- name: Verify NVIDIA container runtime is installed
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-container-runtime
+  register: nvidia_container_runtime
+
+- name: Fail when NVIDIA container runtime is missing
+  ansible.builtin.fail:
+    msg: >-
+      /usr/bin/nvidia-container-runtime is missing after installing the local
+      NVIDIA container toolkit packages.
+  when: not nvidia_container_runtime.stat.executable
+
+- name: Remove legacy partial K3s containerd template
   ansible.builtin.file:
-    path: /var/lib/rancher/k3s/agent/etc/containerd
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
-- name: Configure NVIDIA runtime in K3s containerd template
-  ansible.builtin.template:
-    src: containerd-nvidia-runtime.toml.j2
     dest: /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
-    owner: root
-    group: root
-    mode: "0644"
+    state: absent
   notify: Restart k3s
 
-- name: Configure nvidia-ctk for containerd runtime
-  ansible.builtin.command:
-    argv:
-      - nvidia-ctk
-      - runtime
-      - configure
-      - --runtime=containerd
-      - --set-as-default
-  changed_when: true
-  notify: Restart k3s
-
-# Flush handlers now so K3s restarts before we proceed with image import and device plugin
-- name: Flush handlers to restart K3s with NVIDIA runtime
+# Flush handlers so K3s regenerates its complete containerd config after it can
+# discover nvidia-container-runtime on PATH.
+- name: Flush handlers to regenerate K3s containerd configuration
   ansible.builtin.meta: flush_handlers
 
-- name: Wait for K3s to be ready after restart
+- name: Wait for the K3s API after restart
   ansible.builtin.command:
     argv:
       - /usr/local/bin/k3s
@@ -358,6 +366,65 @@
   retries: 20
   delay: 6
   until: k3s_nodes_after_restart.rc == 0
+
+- name: Read effective containerd CRI configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - crictl
+      - info
+  register: k3s_crictl_info
+  changed_when: false
+
+- name: Validate K3s CNI paths and runtime status
+  ansible.builtin.assert:
+    that:
+      - k3s_cri_info.cniconfig.PluginConfDir == '/var/lib/rancher/k3s/agent/etc/cni/net.d'
+      - k3s_cri_info.cniconfig.PluginDirs | select('match', '^/var/lib/rancher/k3s/data/(cni|[^/]+/bin)$') | list | length > 0
+      - k3s_runtime_ready.status | bool
+      - k3s_network_ready.status | bool
+    fail_msg: >-
+      K3s containerd has incorrect CNI paths or is not ready. Refusing to
+      continue with GPU workloads. crictl info: {{ k3s_crictl_info.stdout }}
+  vars:
+    k3s_cri_info: "{{ k3s_crictl_info.stdout | from_json }}"
+    k3s_runtime_ready: >-
+      {{ k3s_cri_info.status.conditions
+         | selectattr('type', 'equalto', 'RuntimeReady') | first }}
+    k3s_network_ready: >-
+      {{ k3s_cri_info.status.conditions
+         | selectattr('type', 'equalto', 'NetworkReady') | first }}
+
+- name: Wait for the K3s node and CNI to become Ready
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - wait
+      - --for=condition=Ready
+      - node
+      - --all
+      - --timeout=300s
+  changed_when: false
+
+- name: Verify the CNI bridge exists
+  ansible.builtin.command:
+    argv:
+      - ip
+      - link
+      - show
+      - cni0
+  changed_when: false
+
+- name: Verify K3s registered the NVIDIA RuntimeClass
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - get
+      - runtimeclass
+      - nvidia
+  changed_when: false
 
 # ---------------------------------------------------------------------------
 # Load NVIDIA device plugin image into K3s/containerd
@@ -372,6 +439,16 @@
       - "{{ gpu_device_plugin_image_archive }}"
   changed_when: true
 
+- name: Import CUDA validation image into K3s containerd
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - ctr
+      - images
+      - import
+      - "{{ gpu_cuda_validation_image_archive }}"
+  changed_when: true
+
 # ---------------------------------------------------------------------------
 # Apply NVIDIA device plugin manifest
 # ---------------------------------------------------------------------------
@@ -382,6 +459,14 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Select the NVIDIA RuntimeClass for the device plugin
+  ansible.builtin.lineinfile:
+    path: "{{ gpu_device_plugin_manifest_dest }}"
+    insertbefore: '^      priorityClassName:'
+    line: '      runtimeClassName: nvidia'
+    firstmatch: true
+    state: present
 
 - name: Apply NVIDIA device plugin manifest
   ansible.builtin.command:
@@ -447,9 +532,11 @@
         namespace: kube-system
       spec:
         restartPolicy: Never
+        runtimeClassName: nvidia
         containers:
           - name: nvidia-smi
-            image: nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04
+            image: "{{ gpu_cuda_validation_image }}"
+            imagePullPolicy: Never
             command: ["nvidia-smi"]
             resources:
               limits:

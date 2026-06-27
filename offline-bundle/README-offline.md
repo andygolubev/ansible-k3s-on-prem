@@ -51,7 +51,9 @@ payload/
     DEVICE_PLUGIN_IMAGE
   vllm/
     images/vllm-openai.tar          vLLM server image archive (~8 GB compressed)
+    images/cuda-validation.tar      CUDA image for offline GPU validation
     VLLM_IMAGE
+    CUDA_VALIDATION_IMAGE
   models/
     Qwen2.5-7B-Instruct/            Model weights, tokenizer, config (~14 GB)
   bin/                              crane binary

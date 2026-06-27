@@ -7,6 +7,8 @@ gpu_images_dir: "{{ gpu_payload_dir }}/images"
 gpu_device_plugin_manifest_src: "{{ gpu_payload_dir }}/device-plugin.yaml"
 gpu_device_plugin_image_archive: "{{ gpu_images_dir }}/nvidia-device-plugin.tar"
 gpu_device_plugin_manifest_dest: /tmp/offline-nvidia-device-plugin.yaml
+gpu_cuda_validation_image: nvcr.io/nvidia/cuda:12.4.1-base-ubuntu22.04
+gpu_cuda_validation_image_archive: "{{ offline_bundle_root }}/payload/vllm/images/cuda-validation.tar"
 
 # NVMe instance store
 gpu_nvme_device: /dev/nvme1n1

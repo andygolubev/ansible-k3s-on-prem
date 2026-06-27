@@ -1,7 +1,0 @@
-# NVIDIA container runtime configuration for K3s containerd.
-# Dropped into /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
-# K3s merges this with its own generated config on startup.
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
-  runtime_type = "io.containerd.runc.v2"
-  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
-    BinaryName = "/usr/bin/nvidia-container-runtime"

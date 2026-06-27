@@ -80,6 +80,15 @@ M  offline-bundle/ansible/roles/gpu_offline/tasks/main.yml
 
 ## Open problem — K3s CNI not initializing (UNRESOLVED)
 
+> **Confirmed root cause:** the partial NVIDIA `config.toml.tmpl` replaced
+> K3s's generated containerd configuration. `k3s crictl info` showed containerd
+> looking for CNI configuration in `/etc/cni/net.d` and binaries in
+> `/opt/cni/bin`, while K3s installs them under `/var/lib/rancher/k3s/`. The
+> nftables warning was unrelated: iptables NAT/mangle operations succeed. The
+> repair removes this template, relies on K3s runtime auto-discovery, validates
+> the effective CNI paths, and explicitly selects `RuntimeClass: nvidia` for
+> GPU workloads.
+
 **This is the current blocker. Solve this before re-running the playbook.**
 
 ### Symptom
