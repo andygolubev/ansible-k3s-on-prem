@@ -126,18 +126,144 @@
   when: nvme_device_stat.stat.exists
 
 # ---------------------------------------------------------------------------
-# Install NVIDIA driver from local .deb packages (no internet access)
+# NVIDIA driver: reuse an already-working driver, otherwise install from
+# local .deb packages (no internet access).
+#
+# A host may already have the driver installed (e.g. from a previous run or a
+# golden image). We probe with nvidia-smi: when it responds, the driver is
+# functional and we skip installation entirely.
+#
+# When the driver is not functional, the usual culprit on EC2 Ubuntu images is
+# the nouveau kernel module grabbing the GPU at boot before the nvidia modules
+# can load. nouveau is a loadable module here (not built-in), so instead of
+# rebooting we blacklist it, unload it, and load the nvidia modules in place.
+# Only if that still does not bring nvidia-smi up do we install the local
+# .deb packages (which build the nvidia DKMS modules for this kernel).
 # ---------------------------------------------------------------------------
+- name: Check whether the NVIDIA driver is already working
+  ansible.builtin.command:
+    argv:
+      - nvidia-smi
+      - --query-gpu=driver_version
+      - --format=csv,noheader
+  register: nvidia_driver_check
+  failed_when: false
+  changed_when: false
+
+- name: Record whether the NVIDIA driver is functional
+  ansible.builtin.set_fact:
+    nvidia_driver_functional: >-
+      {{ (nvidia_driver_check.rc == 0 and (nvidia_driver_check.stdout | trim | length > 0)) | bool }}
+
+- name: Blacklist nouveau so the nvidia driver can claim the GPU
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/blacklist-nouveau.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      blacklist nouveau
+      options nouveau modeset=0
+  register: nouveau_blacklist
+  when: not (nvidia_driver_functional | bool)
+
+# Bake the nouveau blacklist into the initramfs so it survives reboots.
+# Without this, nouveau may re-grab the GPU at the next boot.
+- name: Refresh initramfs with the nouveau blacklist
+  ansible.builtin.command:
+    argv:
+      - update-initramfs
+      - -u
+      - -k
+      - all
+  changed_when: true
+  when:
+    - not (nvidia_driver_functional | bool)
+    - nouveau_blacklist is changed
+
+# rmmod nouveau alone fails while a GPU PCI device is still bound to it. Unbind
+# every NVIDIA GPU from the nouveau driver first, then remove the module. The PCI
+# address is discovered dynamically so this is not hard-coded to one instance.
+- name: Find NVIDIA GPU PCI addresses bound to the nouveau driver
+  ansible.builtin.shell: |
+    set -e
+    base=/sys/bus/pci/drivers/nouveau
+    if [ -d "$base" ]; then
+      for link in "$base"/*:*:*.*; do
+        [ -L "$link" ] || continue
+        basename "$(readlink -f "$link")"
+      done
+    fi
+  args:
+    executable: /bin/bash
+  register: nouveau_bound_gpus
+  changed_when: false
+  when: not (nvidia_driver_functional | bool)
+
+- name: Unbind NVIDIA GPUs from the nouveau driver
+  ansible.builtin.shell: |
+    set -e
+    echo "{{ item }}" > /sys/bus/pci/drivers/nouveau/unbind
+  args:
+    executable: /bin/bash
+  loop: "{{ nouveau_bound_gpus.stdout_lines }}"
+  changed_when: true
+  when:
+    - not (nvidia_driver_functional | bool)
+    - nouveau_bound_gpus.stdout_lines | length > 0
+
+- name: Unload the nouveau kernel module
+  ansible.builtin.command:
+    argv:
+      - modprobe
+      - -r
+      - nouveau
+  failed_when: false
+  changed_when: true
+  when: not (nvidia_driver_functional | bool)
+
+- name: Load the nvidia kernel modules
+  ansible.builtin.shell: |
+    set -e
+    # nvidia-drm may report "busy" if a display/DRM lock lingers after nouveau
+    # left; compute (nvidia-smi, CUDA) does not need it, so tolerate failure.
+    for m in nvidia nvidia-uvm nvidia-modeset nvidia-drm; do
+      modprobe "$m" || true
+    done
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: not (nvidia_driver_functional | bool)
+
+- name: Recheck the NVIDIA driver after loading its modules
+  ansible.builtin.command:
+    argv:
+      - nvidia-smi
+      - --query-gpu=driver_version
+      - --format=csv,noheader
+  register: nvidia_driver_recheck
+  failed_when: false
+  changed_when: false
+  when: not (nvidia_driver_functional | bool)
+
+- name: Record whether driver package install is still needed
+  ansible.builtin.set_fact:
+    nvidia_driver_needs_install: >-
+      {{ (not (nvidia_driver_functional | bool) and (nvidia_driver_recheck.rc | default(1) != 0)) | bool }}
+
 - name: Find NVIDIA driver .deb packages
   ansible.builtin.find:
     paths: "{{ gpu_driver_deb_dir }}"
     patterns: "*.deb"
   register: driver_deb_files
+  when: nvidia_driver_needs_install | bool
 
 - name: Fail when no NVIDIA driver .deb files found
   ansible.builtin.fail:
     msg: "No .deb files found in {{ gpu_driver_deb_dir }}"
-  when: driver_deb_files.files | length == 0
+  when:
+    - nvidia_driver_needs_install | bool
+    - driver_deb_files.files | length == 0
 
 - name: Install NVIDIA driver packages from local .deb files
   ansible.builtin.shell: |
@@ -148,6 +274,18 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
   changed_when: true
+  when: nvidia_driver_needs_install | bool
+
+- name: Load nvidia modules after driver package install
+  ansible.builtin.shell: |
+    set -e
+    for m in nvidia nvidia-uvm nvidia-modeset nvidia-drm; do
+      modprobe "$m" || true
+    done
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: nvidia_driver_needs_install | bool
 
 # ---------------------------------------------------------------------------
 # Install NVIDIA container toolkit from local .deb packages
