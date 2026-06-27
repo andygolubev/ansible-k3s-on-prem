@@ -140,8 +140,7 @@ steps=(
 )
 
 export DEFER_CHECKSUMS=1
-fingerprint="$({
-  sha256sum "$0" "$INTERNAL_DIR"/*.sh
+fingerprint_environment="$({
   for name in K3S_VERSION K9S_VERSION VLLM_IMAGE CUDA_VALIDATION_IMAGE \
     MODEL_ID MODEL_REVISION NVIDIA_DRIVER_BRANCH DRIVER_PACKAGES CTK_PACKAGES \
     DEVICE_PLUGIN_VERSION DEVICE_PLUGIN_IMAGE ARGOCD_VERSION CRANE_VERSION \
@@ -153,16 +152,33 @@ total="${#steps[@]}"
 for index in "${!steps[@]}"; do
   script="${steps[$index]}"
   marker="$STATE_DIR/$script.complete"
+  # A change to one downloader must invalidate only that downloader. The old
+  # implementation hashed every internal script into one shared fingerprint,
+  # causing an edit to step 8 to rerun steps 1-7 as well.
+  fingerprint="$(printf '%s  %s\n%s\n' \
+    "$(sha256sum "$INTERNAL_DIR/$script" | cut -d ' ' -f 1)" \
+    "$script" "$fingerprint_environment" | sha256sum | cut -d ' ' -f 1)"
   echo
   echo "================================================================"
   printf 'Step %d/%d: %s\n' "$((index + 1))" "$total" "$script"
   echo "================================================================"
-  if [[ -f "$marker" ]] && [[ "$(<"$marker")" == "$fingerprint" ]]; then
-    echo "Already completed; skipping. Use --clean to rebuild."
-    continue
+  if [[ -f "$marker" ]]; then
+    marker_value="$(<"$marker")"
+    if [[ "$marker_value" == "v2:$fingerprint" ]]; then
+      echo "Already completed; skipping. Use --clean to rebuild."
+      continue
+    fi
+    # Trust and upgrade legacy completion markers once. Existing payloads were
+    # produced before per-step fingerprints existed; rerunning them all during
+    # this migration would defeat the resume fix.
+    if [[ "$marker_value" =~ ^[0-9a-f]{64}$ ]]; then
+      printf 'v2:%s\n' "$fingerprint" > "$marker"
+      echo "Already completed; migrated resume marker and skipped."
+      continue
+    fi
   fi
   "$INTERNAL_DIR/$script"
-  printf '%s\n' "$fingerprint" > "$marker"
+  printf 'v2:%s\n' "$fingerprint" > "$marker"
 done
 unset DEFER_CHECKSUMS
 
