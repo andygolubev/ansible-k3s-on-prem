@@ -12,7 +12,7 @@ BIN_DIR="$PAYLOAD_DIR/bin"
 ARGOCD_VERSION=""
 REGISTRY_IMAGE="${REGISTRY_IMAGE:-registry:2}"
 GIT_MIRROR_IMAGE="${GIT_MIRROR_IMAGE:-nginx:1.27-alpine}"
-AGENT_IMAGE="${AGENT_IMAGE:-agent-chatbot:0.1.0}"
+AGENT_IMAGE="${AGENT_IMAGE:-agent-chatbot:0.2.0}"
 LOCAL_REGISTRY="${LOCAL_REGISTRY:-localhost:5000}"
 CRANE_VERSION="${CRANE_VERSION:-v0.21.6}"
 ARGOCD_LATEST_URL="${ARGOCD_LATEST_URL:-https://github.com/argoproj/argo-cd/releases/latest}"
@@ -27,7 +27,7 @@ for offline installation.
 Environment overrides:
   REGISTRY_IMAGE     default registry:2
   GIT_MIRROR_IMAGE   default nginx:1.27-alpine
-  AGENT_IMAGE        default agent-chatbot:0.1.0
+  AGENT_IMAGE        default agent-chatbot:0.2.0
   LOCAL_REGISTRY     default localhost:5000
   CRANE_VERSION      default v0.21.6
 

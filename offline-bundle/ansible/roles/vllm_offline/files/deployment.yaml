@@ -52,11 +52,11 @@ spec:
             - --dtype
             - float16
             - --max-model-len
-            - "4096"
+            - "16384"
             - --gpu-memory-utilization
             - "0.85"
             - --max-num-seqs
-            - "8"
+            - "4"
             - --port
             - "8000"
             - --host

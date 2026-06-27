@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Offline Chat</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background:#0b1020; color:#e7eaf0 }
+    * { box-sizing:border-box } body { margin:0 } main { max-width:900px; height:100vh; margin:auto; display:grid; grid-template-rows:auto 1fr auto; padding:20px }
+    header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #29324a; padding-bottom:14px }
+    h1 { font-size:20px; margin:0 } .status { color:#7ee787; font-size:13px }
+    #messages { overflow:auto; padding:24px 0; display:flex; flex-direction:column; gap:14px }
+    .message { max-width:82%; padding:12px 15px; border-radius:15px; white-space:pre-wrap; overflow-wrap:anywhere }
+    .user { align-self:flex-end; background:#3157d5 } .assistant { align-self:flex-start; background:#1b2338 }
+    .error { align-self:flex-start; background:#59242b; color:#ffb4b4 }
+    form { display:grid; grid-template-columns:1fr auto; gap:10px; border-top:1px solid #29324a; padding-top:14px }
+    textarea { resize:none; min-height:54px; max-height:180px; border:1px solid #36415d; border-radius:12px; background:#12192b; color:inherit; padding:14px; font:inherit }
+    button { border:0; border-radius:12px; background:#4f72e8; color:white; padding:0 22px; font-weight:650; cursor:pointer }
+    button:disabled { opacity:.5; cursor:wait } .hint { grid-column:1/-1; color:#8b95aa; font-size:12px }
+  </style>
+</head>
+<body>
+<main>
+  <header><h1>Offline Qwen Chat</h1><span class="status">● local cluster</span></header>
+  <section id="messages"><div class="message assistant">Hello. I’m Qwen2.5-7B running on the local K3s GPU.</div></section>
+  <form id="chat">
+    <textarea id="input" placeholder="Ask something…" autofocus required></textarea>
+    <button id="send">Send</button>
+    <div class="hint">Enter to send · Shift+Enter for a new line · Refresh to clear this conversation</div>
+  </form>
+</main>
+<script>
+  const form=document.querySelector('#chat'), input=document.querySelector('#input'), messages=document.querySelector('#messages'), send=document.querySelector('#send');
+  const history=[];
+  function add(content, role) { const el=document.createElement('div'); el.className=`message ${role}`; el.textContent=content; messages.append(el); messages.scrollTop=messages.scrollHeight; return el }
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); const message=input.value.trim(); if(!message) return;
+    add(message,'user'); input.value=''; send.disabled=true; const pending=add('Thinking…','assistant');
+    try {
+      const response=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,history})});
+      if(!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+      const data=await response.json(); pending.textContent=data.response;
+      history.push({role:'user',content:message},{role:'assistant',content:data.response});
+    } catch(error) { pending.remove(); add(`Request failed: ${error.message}`,'error') }
+    finally { send.disabled=false; input.focus() }
+  });
+  input.addEventListener('keydown', event => { if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();form.requestSubmit()} });
+</script>
+</body>
+</html>

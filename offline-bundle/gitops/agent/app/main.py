@@ -4,7 +4,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
-from langchain_core.messages import HumanMessage, SystemMessage
+from fastapi.responses import FileResponse
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
@@ -29,9 +30,15 @@ except Exception:  # pragma: no cover - optional dependency integration
     BatchSpanProcessor = None  # type: ignore[assignment]
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     system: str | None = None
+    history: list[ChatMessage] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -113,6 +120,11 @@ app = FastAPI(title="agent-chatbot", version="0.1.0")
 configure_tracing(app)
 
 
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse("/app/app/index.html")
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
@@ -128,6 +140,11 @@ def chat(request: ChatRequest) -> ChatResponse:
     messages = []
     if request.system:
         messages.append(SystemMessage(content=request.system))
+    for item in request.history:
+        if item.role == "user":
+            messages.append(HumanMessage(content=item.content))
+        elif item.role == "assistant":
+            messages.append(AIMessage(content=item.content))
     messages.append(HumanMessage(content=request.message))
 
     handler = langfuse_handler()
