@@ -51,14 +51,29 @@
     path: "{{ gpu_nvme_device }}"
   register: nvme_device_stat
 
-- name: Format NVMe instance store (first use)
+- name: Detect an existing NVMe filesystem
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -o
+      - value
+      - -s
+      - TYPE
+      - "{{ gpu_nvme_device }}"
+  register: nvme_filesystem_type
+  failed_when: false
+  changed_when: false
+  when: nvme_device_stat.stat.exists
+
+- name: Format uninitialized NVMe instance store
   ansible.builtin.command:
     argv:
       - mkfs.ext4
       - -F
       - "{{ gpu_nvme_device }}"
-  when: nvme_device_stat.stat.exists
-  # idempotent: -F forces formatting; only runs when the device is present
+  when:
+    - nvme_device_stat.stat.exists
+    - nvme_filesystem_type.stdout | trim == ''
   changed_when: true
 
 - name: Create NVMe mount point
