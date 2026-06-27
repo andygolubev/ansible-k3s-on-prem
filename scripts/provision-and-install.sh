@@ -10,7 +10,7 @@ INSTANCE_TYPE="${INSTANCE_TYPE:-g5.2xlarge}"
 ROOT_VOLUME_SIZE="${ROOT_VOLUME_SIZE:-200}"
 SSH_CIDR="${SSH_CIDR:-}"
 KEY_FILE="${KEY_FILE:-${PROJECT_ROOT}/.aws/${STACK_NAME}.pem}"
-REMOTE_PROJECT_DIR="${REMOTE_PROJECT_DIR:-/home/ubuntu/ansible-k3s-on-prem}"
+REMOTE_BUNDLE_DIR="${REMOTE_BUNDLE_DIR:-/home/ubuntu/offline-bundle}"
 
 usage() {
   cat <<EOF
@@ -28,6 +28,7 @@ Options:
   --root-volume-size GIB   Root gp3 volume size (default: ${ROOT_VOLUME_SIZE})
   --ssh-cidr CIDR          Allowed SSH source; auto-detects public_ip/32
   --key-file PATH          Local generated-key destination
+  --remote-bundle-dir PATH Remote test-copy destination (default: ${REMOTE_BUNDLE_DIR})
   -h, --help               Show this help
 
 Environment variables with the uppercase option names are also supported.
@@ -42,6 +43,7 @@ while (($#)); do
     --root-volume-size) ROOT_VOLUME_SIZE="$2"; shift 2 ;;
     --ssh-cidr) SSH_CIDR="$2"; shift 2 ;;
     --key-file) KEY_FILE="$2"; shift 2 ;;
+    --remote-bundle-dir) REMOTE_BUNDLE_DIR="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -138,20 +140,18 @@ for attempt in {1..30}; do
   sleep 10
 done
 
-echo "Uploading the prepared project bundle (this is about $(du -sh "${PROJECT_ROOT}/offline-bundle/payload" | awk '{print $1}'))..."
-ssh "${ssh_options[@]}" "ubuntu@${public_dns}" "rm -rf '${REMOTE_PROJECT_DIR}' && mkdir -p '${REMOTE_PROJECT_DIR}'"
+echo "Uploading offline-bundle as removable-media test data (about $(du -sh "${PROJECT_ROOT}/offline-bundle" | awk '{print $1}'))..."
+ssh "${ssh_options[@]}" "ubuntu@${public_dns}" "rm -rf '${REMOTE_BUNDLE_DIR}' && mkdir -p '${REMOTE_BUNDLE_DIR}'"
 COPYFILE_DISABLE=1 tar \
   --no-xattrs \
-  --exclude='./.git' \
-  --exclude='./.aws' \
-  -C "${PROJECT_ROOT}" \
-  -cf - . | ssh "${ssh_options[@]}" "ubuntu@${public_dns}" "tar -C '${REMOTE_PROJECT_DIR}' -xf -"
+  -C "${PROJECT_ROOT}/offline-bundle" \
+  -cf - . | ssh "${ssh_options[@]}" "ubuntu@${public_dns}" "tar -C '${REMOTE_BUNDLE_DIR}' -xf -"
 
 echo "Running the same target-side installer used with removable media..."
 ssh "${ssh_options[@]}" "ubuntu@${public_dns}" "bash -se" <<REMOTE
 set -Eeuo pipefail
 sudo cloud-init status --wait
-cd '${REMOTE_PROJECT_DIR}'
+cd '${REMOTE_BUNDLE_DIR}'
 sudo ./install.sh
 REMOTE
 

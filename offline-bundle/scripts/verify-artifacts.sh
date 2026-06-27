@@ -77,13 +77,13 @@ if [[ -f "$BUNDLE_DIR/payload/gitops/images/images.tsv" ]]; then
   done < "$BUNDLE_DIR/payload/gitops/images/images.tsv"
 fi
 
-if [[ ! -d "$BUNDLE_DIR/../gitops/app-of-apps" ]]; then
-  echo "Missing app-of-apps source directory next to offline-bundle: gitops/app-of-apps" >&2
+if [[ ! -d "$BUNDLE_DIR/gitops/app-of-apps" ]]; then
+  echo "Missing versioned app-of-apps source: gitops/app-of-apps" >&2
   missing=1
 fi
 
-if [[ ! -d "$BUNDLE_DIR/../apps/agent" ]]; then
-  echo "Missing agent source directory next to offline-bundle: apps/agent" >&2
+if [[ ! -d "$BUNDLE_DIR/gitops/agent" ]]; then
+  echo "Missing versioned agent source: gitops/agent" >&2
   missing=1
 fi
 

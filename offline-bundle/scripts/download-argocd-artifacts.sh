@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$BUNDLE_DIR/.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
 GITOPS_DIR="$PAYLOAD_DIR/gitops"
 ARGOCD_DIR="$GITOPS_DIR/argocd"
@@ -163,7 +162,7 @@ archive_image "$REGISTRY_IMAGE" "$LOCAL_REGISTRY/$REGISTRY_IMAGE" "$(sanitize_im
 archive_image "$GIT_MIRROR_IMAGE" "$LOCAL_REGISTRY/$GIT_MIRROR_IMAGE" "$(sanitize_image "$GIT_MIRROR_IMAGE").tar"
 
 echo "Building $AGENT_IMAGE"
-docker build --platform linux/amd64 -t "$AGENT_IMAGE" "$REPO_ROOT/apps/agent"
+docker build --platform linux/amd64 -t "$AGENT_IMAGE" "$BUNDLE_DIR/gitops/agent"
 docker tag "$AGENT_IMAGE" "$LOCAL_REGISTRY/$AGENT_IMAGE"
 docker save "$AGENT_IMAGE" "$LOCAL_REGISTRY/$AGENT_IMAGE" -o "$IMAGES_DIR/$(sanitize_image "$AGENT_IMAGE").tar"
 printf '%s\t%s\t%s\n' "$AGENT_IMAGE" "$LOCAL_REGISTRY/$AGENT_IMAGE" "payload/gitops/images/$(sanitize_image "$AGENT_IMAGE").tar" >> "$IMAGES_DIR/images.tsv"

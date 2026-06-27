@@ -13,13 +13,17 @@ Ansible runs inside the target host and targets `localhost` with `ansible_connec
 
 ## Payload Directory
 
-All downloaded/generated offline files live under:
+All downloaded/generated, non-versioned offline files live under:
 
 ```text
 offline-bundle/payload/
 ```
 
-This directory is ignored by git. You can delete it and regenerate it with the download scripts.
+This directory is ignored by git. It contains only artifacts fetched or built
+by the preparation scripts; source-controlled installers, Ansible, manifests,
+GitOps definitions, and application source stay outside `payload/` directly
+under `offline-bundle/`. You can delete `payload/` and regenerate it with the
+download scripts.
 
 Generated payload layout:
 
@@ -229,20 +233,41 @@ VERBOSE=1 ./scripts/download-k3s-artifacts.sh
 
 ## Copy Bundle To The Target
 
-Copy the project root after `payload/` has been prepared. The Argo CD workflow needs `offline-bundle/`, `gitops/app-of-apps/`, and `apps/agent/` on the target because the playbook generates local Git mirrors from those source folders.
+After `payload/` has been prepared, copy only the complete `offline-bundle/`
+directory to the target. It is self-contained: versioned GitOps sources are in
+`offline-bundle/gitops/`, while downloaded artifacts are in
+`offline-bundle/payload/`.
 
 Preferred transfer options:
 
 1. UTM shared directory.
-2. An ISO image containing the project root.
+2. An ISO image containing `offline-bundle/`.
 3. SCP, if SSH access is available on the target.
 
 Example once the bundle is visible on the target:
 
 ```bash
-cp -a /path/to/ansible-k3s-on-prem "$HOME/ansible-k3s-on-prem"
-cd "$HOME/ansible-k3s-on-prem/offline-bundle"
+cp -a /path/to/offline-bundle "$HOME/offline-bundle"
+cd "$HOME/offline-bundle"
 ```
+
+## Install Everything With One Command
+
+From the copied `offline-bundle/` directory on the isolated target, run:
+
+```bash
+./install.sh
+```
+
+The installer elevates with `sudo`, performs host and free-space preflight
+checks, verifies every generated payload artifact, bootstraps Ansible from
+local `.deb` files, runs the complete playbook with verbose task output, and
+prints final node and pod status. It is safe to rerun after correcting a
+failure.
+
+The individual verification, bootstrap, and playbook commands below are kept
+for troubleshooting and advanced operation; they are not required during the
+normal one-command flow.
 
 ## Optional Isolation Check
 
@@ -301,7 +326,7 @@ The playbook copies local payload artifacts into place and runs the installer wi
 
 The `k3s_offline` role also creates `/var/lib/rancher/k3s/agent/images/.cache.json` by default. This enables K3s conditional image imports for supported releases, avoiding re-importing unchanged air-gap image archives on every K3s restart. Set `k3s_enable_conditional_image_import: false` in `ansible/group_vars/all.yml` to disable it.
 
-The `argocd_offline` role then imports prepared image archives, starts a single-node local registry at `localhost:5000`, pushes prepared images into it with bundled `crane`, creates read-only local Git mirrors from `gitops/app-of-apps/` and `apps/agent/`, exposes them through a host-side `git daemon` and in-cluster Service, applies the local-image Argo CD manifests, and applies the root app-of-apps Application.
+The `argocd_offline` role then imports prepared image archives, starts a single-node local registry at `localhost:5000`, pushes prepared images into it with bundled `crane`, creates read-only local Git mirrors from `offline-bundle/gitops/app-of-apps/` and `offline-bundle/gitops/agent/`, exposes them through a host-side `git daemon` and in-cluster Service, applies the local-image Argo CD manifests, and applies the root app-of-apps Application.
 
 The `operator_tools_offline` role installs `k9s` to `/usr/local/bin/k9s`.
 
@@ -309,7 +334,7 @@ The `observability_offline` role imports and pushes prepared observability image
 
 ## Agent App Configuration
 
-The `apps/agent/chart/values.yaml` file controls the sample LangChain chatbot deployment:
+The `gitops/agent/chart/values.yaml` file controls the sample LangChain chatbot deployment:
 
 - `replicaCount`: defaults to `1` for the offline demo.
 - `vllm.baseUrl`: OpenAI-compatible local endpoint.

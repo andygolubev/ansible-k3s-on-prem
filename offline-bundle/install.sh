@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_ROOT="${PROJECT_ROOT}/offline-bundle"
+BUNDLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 START_TIME="${SECONDS}"
 
 if [[ -t 1 ]]; then
@@ -44,7 +43,7 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 stage "Offline K3s installation"
-log "Project directory: ${PROJECT_ROOT}"
+log "Bundle directory: ${BUNDLE_ROOT}"
 log "This installer uses local payload files only; it does not provision infrastructure."
 
 stage "1/5 Preflight checks"
@@ -57,7 +56,7 @@ source /etc/os-release
 [[ -x "${BUNDLE_ROOT}/scripts/verify-artifacts.sh" ]] || die "Offline bundle not found beside install.sh."
 [[ -f "${BUNDLE_ROOT}/payload/tools/k9s/k9s" ]] || die "k9s payload is missing."
 [[ -f "${BUNDLE_ROOT}/payload/observability/images/images.tsv" ]] || die "Observability payload is missing."
-available_kib="$(df -Pk "${PROJECT_ROOT}" | awk 'NR == 2 {print $4}')"
+available_kib="$(df -Pk "${BUNDLE_ROOT}" | awk 'NR == 2 {print $4}')"
 log "Host: $(hostname)"
 log "OS: ${PRETTY_NAME}"
 log "Architecture: $(uname -m)"
@@ -86,4 +85,4 @@ stage "5/5 Final status"
 elapsed=$((SECONDS - START_TIME))
 printf '\n%sInstallation completed successfully%s in %dm %02ds.\n' \
   "${GREEN}" "${RESET}" "$((elapsed / 60))" "$((elapsed % 60))"
-printf 'Validate the deployment with: %s\n' "${PROJECT_ROOT}/offline-bundle/VALIDATION.md"
+printf 'Validate the deployment with: %s\n' "${BUNDLE_ROOT}/VALIDATION.md"

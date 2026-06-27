@@ -4,11 +4,12 @@ Proof of concept for K3s in an isolated environment.
 
 ## Install on an isolated server
 
-Prepare `offline-bundle/payload/` on a networked machine, copy this entire
-project directory to removable media, and connect that media to the isolated
-Ubuntu 26.04 AMD64 server. From the copied project directory, run:
+Prepare `offline-bundle/payload/` on a networked machine, copy the
+`offline-bundle/` directory to removable media, and connect that media to the
+isolated Ubuntu 26.04 AMD64 server. From the copied bundle directory, run:
 
 ```bash
+cd offline-bundle
 ./install.sh
 ```
 

@@ -23,7 +23,7 @@ local files only.
               |    k3s/ debs/ gitops/ gpu/ vllm/ models/ bin/  |
               +------------------------+-----------------------+
                                        |
-                                       | copy project root
+                                       | copy offline-bundle/
                                        | shared folder / ISO / SCP
                                        v
                             ISOLATED TARGET HOST
@@ -160,9 +160,9 @@ payload/
    |-- download-observability-artifacts.sh
    `-- verify-artifacts.sh
 
-2. Copy the full project root to the isolated target
+2. Copy the self-contained offline-bundle/ directory to the isolated target
    |
-   `-- includes offline-bundle/, gitops/app-of-apps/, and apps/agent/
+   `-- includes versioned gitops/ sources and generated payload/ artifacts
 
 3. Bootstrap Ansible from local .deb files
    |
@@ -205,7 +205,7 @@ site.yml
 |   |-- imports prepared GitOps image archives into K3s containerd
 |   |-- deploys a host-network local registry at localhost:5000
 |   |-- pushes prepared images into the local registry with bundled crane
-|   |-- creates bare Git mirrors from gitops/app-of-apps and apps/agent
+|   |-- creates bare Git mirrors from offline-bundle/gitops sources
 |   |-- starts host-side git daemon on port 9418
 |   |-- exposes that daemon in-cluster as git://git-mirror.gitops.svc.cluster.local
 |   |-- installs Argo CD from a local-image manifest
