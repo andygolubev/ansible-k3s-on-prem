@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERNAL_DIR="$SCRIPT_DIR/internal"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
+STATE_DIR="$PAYLOAD_DIR/.download-state"
 CLEAN=0
 ASSUME_YES=0
 
@@ -71,15 +72,19 @@ run_in_docker() {
     printenv "$name" >/dev/null 2>&1 && docker_args+=(--env "$name")
   done
 
+  local image_name
+  image_name="ansible-k3s-offline-downloader:$(cksum "$BUNDLE_DIR/Dockerfile.downloader" | awk '{print $1}')"
+  if ! docker image inspect "$image_name" >/dev/null 2>&1; then
+    echo "Building the downloader image (one-time setup)..."
+    docker build --platform linux/amd64 \
+      --file "$BUNDLE_DIR/Dockerfile.downloader" \
+      --tag "$image_name" "$SCRIPT_DIR"
+  fi
+
   echo "Starting Ubuntu 26.04 AMD64 downloader in Docker..."
   docker "${docker_args[@]}" \
-    ubuntu:26.04 bash -c '
-      set -e
-      export DEBIAN_FRONTEND=noninteractive
-      apt-get update
-      apt-get install -y --no-install-recommends ca-certificates curl docker.io findutils gnupg python3 sudo
-      exec /workspace/offline-bundle/scripts/download-all-artifacts.sh "$@"
-    ' bash "$@"
+    "$image_name" \
+    /workspace/offline-bundle/scripts/download-all-artifacts.sh "$@"
 }
 
 if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]] \
@@ -121,6 +126,7 @@ if [[ "$CLEAN" == "1" && -d "$PAYLOAD_DIR" ]]; then
   rm -rf "$PAYLOAD_DIR"
 fi
 mkdir -p "$PAYLOAD_DIR"
+mkdir -p "$STATE_DIR"
 
 steps=(
   download-k3s-artifacts.sh
@@ -134,14 +140,29 @@ steps=(
 )
 
 export DEFER_CHECKSUMS=1
+fingerprint="$({
+  sha256sum "$0" "$INTERNAL_DIR"/*.sh
+  for name in K3S_VERSION K9S_VERSION VLLM_IMAGE CUDA_VALIDATION_IMAGE \
+    MODEL_ID MODEL_REVISION NVIDIA_DRIVER_BRANCH DRIVER_PACKAGES CTK_PACKAGES \
+    DEVICE_PLUGIN_VERSION DEVICE_PLUGIN_IMAGE ARGOCD_VERSION CRANE_VERSION \
+    AGENT_IMAGE GIT_MIRROR_IMAGE REGISTRY_IMAGE LOCAL_REGISTRY; do
+    printf '%s=%s\n' "$name" "${!name-}"
+  done
+} | sha256sum | cut -d ' ' -f 1)"
 total="${#steps[@]}"
 for index in "${!steps[@]}"; do
   script="${steps[$index]}"
+  marker="$STATE_DIR/$script.complete"
   echo
   echo "================================================================"
   printf 'Step %d/%d: %s\n' "$((index + 1))" "$total" "$script"
   echo "================================================================"
+  if [[ -f "$marker" ]] && [[ "$(<"$marker")" == "$fingerprint" ]]; then
+    echo "Already completed; skipping. Use --clean to rebuild."
+    continue
+  fi
   "$INTERNAL_DIR/$script"
+  printf '%s\n' "$fingerprint" > "$marker"
 done
 unset DEFER_CHECKSUMS
 
@@ -149,7 +170,7 @@ echo
 echo "Generating final checksums (the complete payload is read once)..."
 (
   cd "$PAYLOAD_DIR"
-  find . -type f ! -name checksums.txt -print0 \
+  find . -type f ! -name checksums.txt ! -path './.download-state/*' -print0 \
     | sort -z \
     | xargs -0 --no-run-if-empty sha256sum > checksums.txt
 )

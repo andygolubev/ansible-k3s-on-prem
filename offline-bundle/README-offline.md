@@ -47,6 +47,9 @@ It invokes all specialized downloaders in order, hashes the complete payload
 only once at the end, and runs `verify-artifacts.sh`. The individual scripts
 below remain useful for refreshing one artifact group. `payload/` is generated
 and gitignored; do not place version-controlled source or manifests there.
+Successful steps are recorded under `payload/.download-state/`, so an
+interrupted run resumes at the first incomplete step. Downloader changes or
+version overrides invalidate the markers; `--clean` forces a complete rebuild.
 
 Generated payload layout:
 

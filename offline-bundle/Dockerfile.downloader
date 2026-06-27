@@ -1,0 +1,8 @@
+FROM ubuntu:26.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates curl docker.io findutils gnupg python3 sudo \
+    && rm -rf /var/lib/apt/lists/*
