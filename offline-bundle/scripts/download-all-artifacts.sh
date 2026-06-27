@@ -16,8 +16,9 @@ Usage: download-all-artifacts.sh [--clean] [--yes]
 Downloads/builds every generated artifact required by install.sh, writes one
 final checksum manifest, and verifies the completed payload.
 
-Run on an internet-connected Ubuntu 26.04 AMD64 machine with Docker running
-and at least 50 GB of free disk space.
+On other operating systems, the script automatically runs itself in an
+Ubuntu 26.04 AMD64 Docker container. Docker must be running and at least 50 GB
+of free disk space must be available.
 
 Options:
   --clean  Delete the existing gitignored payload before downloading.
@@ -38,10 +39,54 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
-  echo "This complete downloader must run on Linux AMD64." >&2
-  echo "Use an internet-connected Ubuntu 26.04 AMD64 VM or container." >&2
-  exit 1
+run_in_docker() {
+  command -v docker >/dev/null 2>&1 || {
+    echo "Docker is required to start the Ubuntu 26.04 AMD64 downloader." >&2
+    exit 1
+  }
+  docker info >/dev/null 2>&1 || {
+    echo "Docker is installed but its daemon is not available." >&2
+    exit 1
+  }
+
+  local docker_host socket_path
+  docker_host="$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null || true)"
+  socket_path="${docker_host#unix://}"
+  if [[ "$docker_host" != unix://* || ! -S "$socket_path" ]]; then
+    echo "The active Docker context does not expose a Unix socket." >&2
+    echo "A Docker socket is required because the downloader pulls and saves images." >&2
+    exit 1
+  fi
+
+  local -a env_args=()
+  local name
+  for name in K3S_VERSION K9S_VERSION VLLM_IMAGE CUDA_VALIDATION_IMAGE \
+    MODEL_ID MODEL_REVISION HF_TOKEN NVIDIA_DRIVER_BRANCH DRIVER_PACKAGES \
+    CTK_PACKAGES DEVICE_PLUGIN_VERSION DEVICE_PLUGIN_IMAGE ARGOCD_VERSION \
+    CRANE_VERSION AGENT_IMAGE GIT_MIRROR_IMAGE REGISTRY_IMAGE LOCAL_REGISTRY; do
+    printenv "$name" >/dev/null 2>&1 && env_args+=(--env "$name")
+  done
+
+  echo "Starting Ubuntu 26.04 AMD64 downloader in Docker..."
+  docker run --rm --platform linux/amd64 \
+    --mount "type=bind,src=$BUNDLE_DIR,dst=/workspace/offline-bundle" \
+    --mount "type=bind,src=$socket_path,dst=/var/run/docker.sock" \
+    "${env_args[@]}" \
+    ubuntu:26.04 bash -c '
+      set -e
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends ca-certificates curl docker.io findutils python3 sudo
+      exec /workspace/offline-bundle/scripts/download-all-artifacts.sh "$@"
+    ' bash "$@"
+}
+
+if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]] \
+  || [[ ! -r /etc/os-release ]] \
+  || ! grep -qx 'ID=ubuntu' /etc/os-release \
+  || ! grep -qx 'VERSION_ID="26.04"' /etc/os-release; then
+  run_in_docker "$@"
+  exit $?
 fi
 if [[ ! -r /etc/os-release ]]; then
   echo "Cannot verify the preparation host OS." >&2

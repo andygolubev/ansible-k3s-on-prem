@@ -27,9 +27,10 @@ download scripts.
 
 ### Download everything with one command
 
-The recommended preparation path is the aggregate downloader. Run it on an
-internet-connected **Ubuntu 26.04 AMD64** machine with Docker running and at
-least 50 GB free:
+The recommended preparation path is the aggregate downloader. Docker must be
+running and at least 50 GB must be free. On macOS and non-AMD64 hosts, the
+script automatically launches an **Ubuntu 26.04 AMD64** Docker container and
+mounts the bundle and the active Docker socket:
 
 ```bash
 cd offline-bundle
