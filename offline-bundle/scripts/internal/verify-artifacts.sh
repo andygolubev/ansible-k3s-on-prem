@@ -122,6 +122,12 @@ if [[ -f "$BUNDLE_DIR/payload/gpu/DEVICE_PLUGIN_VERSION" ]]; then
     echo "Re-run scripts/internal/download-gpu-artifacts.sh to rebuild it." >&2
     missing=1
   fi
+  if compgen -G "$BUNDLE_DIR/payload/gpu/debs/nvidia-driver/make_*.deb" >/dev/null \
+    && compgen -G "$BUNDLE_DIR/payload/gpu/debs/nvidia-driver/make-guile_*.deb" >/dev/null; then
+    echo "GPU driver payload contains conflicting make and make-guile packages." >&2
+    echo "Re-run scripts/internal/download-gpu-artifacts.sh to rebuild it." >&2
+    missing=1
+  fi
 else
   echo "Note: GPU artifacts not found (payload/gpu/DEVICE_PLUGIN_VERSION missing). Run download-gpu-artifacts.sh to include them." >&2
 fi

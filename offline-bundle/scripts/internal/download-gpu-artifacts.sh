@@ -181,9 +181,10 @@ download_driver_packages() {
   filtered=()
   for package in "${resolved[@]}"; do
     case "$package" in
-      opensysusers|systemd-standalone-sysusers)
+      opensysusers|systemd-standalone-sysusers|make-guile)
         # Full systemd supplies systemd-sysusers; standalone alternatives
         # conflict when every payload package is passed to dpkg together.
+        # Likewise, make-guile conflicts with the regular make dependency.
         continue
         ;;
       nvidia-dkms-*)
