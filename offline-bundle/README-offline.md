@@ -57,7 +57,8 @@ Generated payload layout:
 payload/
   k3s/                              K3s binary, install script, airgap image tarball
   debs/ubuntu-26.04-amd64/
-    ansible-and-deps/               Ansible + dependency .deb packages
+    ansible-and-deps/               Ansible, host tools, and dependency .deb packages
+    HOST_TOOL_PACKAGES              Installed host-tool package manifest
   gitops/
     argocd/                         Argo CD install manifest (original + local-image variant)
     images/                         images.tsv manifest + image archives (.tar)
@@ -220,7 +221,15 @@ curl -L -o k3s-airgap-images-amd64.tar.zst \
 payload/debs/ubuntu-26.04-amd64/ansible-and-deps/
 ```
 
-The default package set intentionally does not include `openssh-server`.
+The same payload includes a compact offline troubleshooting toolkit: `zip`,
+`unzip`, `curl`, `wget`, `rsync`, `jq`, `tar`, `gzip`, `bzip2`, `xz`, `zstd`,
+`vim-tiny`, `nano`, `less`, `tmux`, `htop`, `tree`, `lsof`, `strace`, `file`,
+`ping`, `iproute2`, `dnsutils`, `netcat`, `socat`, `traceroute`, `mtr`,
+`tcpdump`, GnuPG, certificates, and the OpenSSH client. The resolved package
+names are recorded in `HOST_TOOL_PACKAGES` and verified after installation.
+Override the defaults at build time with a whitespace-separated
+`HOST_TOOL_PACKAGES` environment variable. The default set intentionally does
+not include `openssh-server`.
 
 `download-argocd-artifacts.sh` downloads a pinned Argo CD install manifest, rewrites image references for `localhost:5000`, downloads the offline `crane` registry push helper, builds the `agent` image, and saves all required Argo CD, registry, and agent image archives into:
 

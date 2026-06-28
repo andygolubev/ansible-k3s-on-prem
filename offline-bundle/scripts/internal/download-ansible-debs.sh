@@ -6,13 +6,60 @@ BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PAYLOAD_DIR="$BUNDLE_DIR/payload"
 DEB_DIR="$PAYLOAD_DIR/debs/ubuntu-26.04-amd64/ansible-and-deps"
 
-PACKAGES=(
+CORE_PACKAGES=(
   ansible
   ansible-core
   git
   python3
   sudo
 )
+
+# General-purpose tools intentionally installed on every offline target. Keep
+# this list to small, distro-supported utilities useful during recovery and
+# troubleshooting; workload-specific clients belong in their own payloads.
+DEFAULT_HOST_TOOL_PACKAGES=(
+  bash-completion
+  bzip2
+  ca-certificates
+  curl
+  dnsutils
+  file
+  git
+  gnupg
+  gzip
+  htop
+  iproute2
+  iputils-ping
+  jq
+  less
+  lsof
+  mtr-tiny
+  nano
+  netcat-openbsd
+  openssh-client
+  procps
+  rsync
+  socat
+  strace
+  tar
+  tcpdump
+  tmux
+  traceroute
+  tree
+  unzip
+  vim-tiny
+  wget
+  xz-utils
+  zip
+  zstd
+)
+
+if [[ -n "${HOST_TOOL_PACKAGES:-}" ]]; then
+  read -r -a HOST_TOOLS <<< "$HOST_TOOL_PACKAGES"
+else
+  HOST_TOOLS=("${DEFAULT_HOST_TOOL_PACKAGES[@]}")
+fi
+PACKAGES=("${CORE_PACKAGES[@]}" "${HOST_TOOLS[@]}")
 
 require_linux_amd64() {
   if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
@@ -73,6 +120,8 @@ require_command sort
 require_command sed
 require_command xargs
 
+# Never mix a newly resolved dependency closure with stale packages.
+rm -rf "$DEB_DIR"
 mkdir -p "$DEB_DIR"
 
 echo "Updating apt metadata..."
@@ -116,4 +165,5 @@ fi
 generate_checksums
 
 echo "Downloaded Ansible .deb packages to $DEB_DIR"
+printf '%s\n' "${HOST_TOOLS[@]}" > "$PAYLOAD_DIR/debs/ubuntu-26.04-amd64/HOST_TOOL_PACKAGES"
 echo "Updated $PAYLOAD_DIR/checksums.txt"
