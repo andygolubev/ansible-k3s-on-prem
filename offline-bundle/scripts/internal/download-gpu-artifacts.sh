@@ -101,6 +101,8 @@ download_deb_packages() {
   local dest_dir="$1"
   shift
   local packages=("$@")
+  local package
+  local -a filtered
 
   # A resumed bundle build must not retain packages selected by an older
   # dependency graph. dpkg installs every file in this directory on the target.
@@ -124,6 +126,17 @@ download_deb_packages() {
       | grep -E '^[[:alnum:]][[:alnum:].+-]+$' \
       | sort -u
   )
+
+  filtered=()
+  for package in "${resolved[@]}"; do
+    case "$package" in
+      opensysusers|systemd-standalone-sysusers)
+        continue
+        ;;
+    esac
+    filtered+=("$package")
+  done
+  resolved=("${filtered[@]}")
 
   if [[ "${#resolved[@]}" -eq 0 ]]; then
     echo "No packages resolved for: ${packages[*]}" >&2
@@ -168,6 +181,11 @@ download_driver_packages() {
   filtered=()
   for package in "${resolved[@]}"; do
     case "$package" in
+      opensysusers|systemd-standalone-sysusers)
+        # Full systemd supplies systemd-sysusers; standalone alternatives
+        # conflict when every payload package is passed to dpkg together.
+        continue
+        ;;
       nvidia-dkms-*)
         # The AWS kernel module package is used instead of DKMS.
         continue

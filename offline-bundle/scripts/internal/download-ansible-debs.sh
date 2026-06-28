@@ -22,7 +22,7 @@ DEFAULT_HOST_TOOL_PACKAGES=(
   bzip2
   ca-certificates
   curl
-  dnsutils
+  bind9-dnsutils
   file
   git
   gnupg
@@ -145,6 +145,21 @@ mapfile -t RESOLVED_PACKAGES < <(
     | grep -E '^[[:alnum:]][[:alnum:].+-]+$' \
     | sort -u
 )
+
+# apt-cache walks every alternative dependency provider instead of selecting
+# one coherent solution. The full systemd package already provides
+# systemd-sysusers on the target, so including either standalone provider makes
+# the generated payload internally conflicting when dpkg installs every .deb.
+FILTERED_PACKAGES=()
+for package in "${RESOLVED_PACKAGES[@]}"; do
+  case "$package" in
+    opensysusers|systemd-standalone-sysusers)
+      continue
+      ;;
+  esac
+  FILTERED_PACKAGES+=("$package")
+done
+RESOLVED_PACKAGES=("${FILTERED_PACKAGES[@]}")
 
 if [[ "${#RESOLVED_PACKAGES[@]}" -eq 0 ]]; then
   echo "No packages were resolved." >&2
