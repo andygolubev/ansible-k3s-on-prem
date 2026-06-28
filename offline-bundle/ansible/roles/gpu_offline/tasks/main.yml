@@ -278,6 +278,25 @@
     - nvidia_driver_needs_install | bool
     - driver_deb_files.files | length == 0
 
+- name: Find unsafe NVIDIA driver packages
+  ansible.builtin.set_fact:
+    unsafe_driver_deb_files: >-
+      {{ driver_deb_files.files
+         | map(attribute='path')
+         | map('basename')
+         | select('match', '^(nvidia-dkms-|linux-image-|linux-headers-|linux-(modules|objects|signatures)-.*-(azure|azure-fde|gcp|generic|ibm|nvidia|oracle)(_|-))')
+         | list }}
+  when: nvidia_driver_needs_install | bool
+
+- name: Reject driver payloads containing DKMS or non-AWS kernels
+  ansible.builtin.fail:
+    msg: >-
+      Unsafe NVIDIA driver payload contains DKMS or non-AWS kernel packages:
+      {{ unsafe_driver_deb_files | join(', ') }}. Rebuild the GPU artifacts.
+  when:
+    - nvidia_driver_needs_install | bool
+    - unsafe_driver_deb_files | length > 0
+
 - name: Install NVIDIA driver packages from local .deb files
   ansible.builtin.shell: |
     set -euo pipefail

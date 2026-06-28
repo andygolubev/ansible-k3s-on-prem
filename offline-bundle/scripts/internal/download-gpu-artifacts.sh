@@ -19,7 +19,8 @@ DRIVER_DEB_DIR="$GPU_DIR/debs/nvidia-driver"
 CTK_DEB_DIR="$GPU_DIR/debs/nvidia-ctk"
 IMAGES_DIR="$GPU_DIR/images"
 
-NVIDIA_DRIVER_BRANCH="${NVIDIA_DRIVER_BRANCH:-570}"
+NVIDIA_DRIVER_BRANCH="${NVIDIA_DRIVER_BRANCH:-580}"
+NVIDIA_KERNEL_FLAVOUR="${NVIDIA_KERNEL_FLAVOUR:-aws}"
 DEVICE_PLUGIN_VERSION="${DEVICE_PLUGIN_VERSION:-v0.17.0}"
 DEVICE_PLUGIN_IMAGE="${DEVICE_PLUGIN_IMAGE:-nvcr.io/nvidia/k8s-device-plugin:${DEVICE_PLUGIN_VERSION}}"
 DEVICE_PLUGIN_MANIFEST_URL="${DEVICE_PLUGIN_MANIFEST_URL:-https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/${DEVICE_PLUGIN_VERSION}/deployments/static/nvidia-device-plugin.yml}"
@@ -101,6 +102,9 @@ download_deb_packages() {
   shift
   local packages=("$@")
 
+  # A resumed bundle build must not retain packages selected by an older
+  # dependency graph. dpkg installs every file in this directory on the target.
+  rm -rf "$dest_dir"
   mkdir -p "$dest_dir"
   echo "Resolving packages and dependencies for: ${packages[*]}"
   mapfile -t resolved < <(
@@ -136,6 +140,59 @@ download_deb_packages() {
     echo "No .deb packages were downloaded to $dest_dir" >&2
     exit 1
   fi
+}
+
+download_driver_packages() {
+  local dest_dir="$1"
+  shift
+  local packages=("$@")
+  local package
+  local -a resolved filtered
+
+  rm -rf "$dest_dir"
+  mkdir -p "$dest_dir"
+  echo "Resolving AWS NVIDIA driver packages for: ${packages[*]}"
+  mapfile -t resolved < <(
+    apt-cache depends --recurse \
+      --no-recommends --no-suggests --no-conflicts --no-breaks \
+      --no-replaces --no-enhances "${packages[@]}" \
+      | awk '
+          /^[[:alnum:]][[:alnum:].+:-]*$/ { print $1; next }
+          /^[[:space:]]*(PreDepends|Depends):/ { print $2 }
+        ' \
+      | sed 's/:any$//' \
+      | grep -E '^[[:alnum:]][[:alnum:].+-]+$' \
+      | sort -u
+  )
+
+  filtered=()
+  for package in "${resolved[@]}"; do
+    case "$package" in
+      nvidia-dkms-*)
+        # The AWS kernel module package is used instead of DKMS.
+        continue
+        ;;
+      linux-image-*|linux-headers-*|linux-modules-*|linux-objects-*|linux-signatures-*)
+        # apt-cache recursively emits every alternative kernel flavour. Keep
+        # only NVIDIA module dependencies for the selected target flavour.
+        if [[ "$package" != *nvidia* || "$package" != *"${NVIDIA_KERNEL_FLAVOUR}"* ]]; then
+          continue
+        fi
+        ;;
+    esac
+    filtered+=("$package")
+  done
+
+  if [[ " ${filtered[*]} " != *" linux-modules-nvidia-${NVIDIA_DRIVER_BRANCH}-server-${NVIDIA_KERNEL_FLAVOUR} "* ]]; then
+    echo "Failed to resolve the NVIDIA ${NVIDIA_KERNEL_FLAVOUR} kernel module package." >&2
+    exit 1
+  fi
+
+  echo "Downloading ${#filtered[@]} AWS driver packages to $dest_dir..."
+  (
+    cd "$dest_dir"
+    apt-get download "${filtered[@]}"
+  )
 }
 
 while [[ $# -gt 0 ]]; do
@@ -206,8 +263,9 @@ DRIVER_PACKAGES=(
   "nvidia-driver-${NVIDIA_DRIVER_BRANCH}-server"
   "nvidia-utils-${NVIDIA_DRIVER_BRANCH}-server"
   "libnvidia-compute-${NVIDIA_DRIVER_BRANCH}-server"
+  "linux-modules-nvidia-${NVIDIA_DRIVER_BRANCH}-server-${NVIDIA_KERNEL_FLAVOUR}"
 )
-download_deb_packages "$DRIVER_DEB_DIR" "${DRIVER_PACKAGES[@]}"
+download_driver_packages "$DRIVER_DEB_DIR" "${DRIVER_PACKAGES[@]}"
 
 # ---------------------------------------------------------------------------
 # Download NVIDIA container toolkit packages
