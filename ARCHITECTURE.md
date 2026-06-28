@@ -45,12 +45,10 @@ local files only.
 
 ```text
 ansible-k3s-on-prem/
-|-- apps/
-|   `-- agent/                    FastAPI/LangChain chatbot and Helm chart
-|-- gitops/
-|   `-- app-of-apps/              Argo CD root Application and child apps
 |-- offline-bundle/
 |   |-- ansible/                  Local Ansible inventory, vars, playbook, roles
+|   |-- gitops/                   Agent source/chart and Argo CD app-of-apps
+|   |-- observability/            Version pins, manifests, and dashboards
 |   |-- payload/                  Generated offline artifacts, ignored by git
 |   |-- scripts/                  Artifact download, verify, and bootstrap scripts
 |   `-- VALIDATION.md             Manual validation and acceptance checks
@@ -128,7 +126,7 @@ payload/
 |-- tools/
 |   `-- k9s/
 |-- gpu/
-|   |-- debs/nvidia-driver/           NVIDIA driver .deb packages
+|   |-- debs/nvidia-driver/           NVIDIA 580 server + AWS kernel module .debs
 |   |-- debs/nvidia-ctk/              NVIDIA container toolkit .deb packages
 |   |-- images/nvidia-device-plugin.tar
 |   `-- device-plugin.yaml
@@ -152,6 +150,11 @@ payload/
    |
    `-- offline-bundle/scripts/download-all-artifacts.sh
        `-- invokes scripts/internal/* and verifies the complete payload
+
+   Each downloader has its own content/environment fingerprint under
+   payload/.download-state. Unchanged completed steps are skipped on resume.
+   GPU package directories are rebuilt before download so obsolete dependency
+   graphs cannot leave stale .deb files in an offline installation.
 
 2. Copy the self-contained offline-bundle/ directory to the isolated target
    |
@@ -188,7 +191,8 @@ site.yml
 |-- gpu_offline
 |   |-- verifies NVIDIA driver, container toolkit, and device plugin payloads
 |   |-- formats and mounts /dev/nvme1n1 at /mnt/nvme when present
-|   |-- installs NVIDIA .deb packages with apt --no-download fallback
+|   |-- rejects DKMS and non-AWS kernel packages in the driver payload
+|   |-- installs NVIDIA server-driver .debs and precompiled AWS kernel modules
 |   |-- configures the NVIDIA runtime for K3s containerd
 |   |-- imports the NVIDIA device plugin image archive
 |   |-- applies the device plugin DaemonSet
