@@ -34,7 +34,7 @@ Must run on an internet-connected Ubuntu 26.04 AMD64 host.
 Requires: apt-get, docker (for image download), curl, sha256sum.
 
 Options:
-  --driver-branch BRANCH         NVIDIA driver branch to install (default: 570)
+  --driver-branch BRANCH         NVIDIA driver branch to install (default: 580)
   --device-plugin-version VER    NVIDIA device plugin version (default: v0.17.0)
 
 Environment:
@@ -190,7 +190,7 @@ download_driver_packages() {
         # The AWS kernel module package is used instead of DKMS.
         continue
         ;;
-      linux-image-*|linux-headers-*|linux-modules-*|linux-objects-*|linux-signatures-*)
+      linux-image-*|linux-headers-*|linux-main-modules-*|linux-modules-*|linux-objects-*|linux-signatures-*)
         # apt-cache recursively emits every alternative kernel flavour. Keep
         # only NVIDIA module dependencies for the selected target flavour.
         if [[ "$package" != *nvidia* || "$package" != *"${NVIDIA_KERNEL_FLAVOUR}"* ]]; then

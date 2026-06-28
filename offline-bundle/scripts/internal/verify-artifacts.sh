@@ -106,6 +106,22 @@ if [[ -f "$BUNDLE_DIR/payload/gpu/DEVICE_PLUGIN_VERSION" ]]; then
     echo "GPU artifacts incomplete. Run scripts/download-all-artifacts.sh first." >&2
     missing=1
   fi
+
+  unsafe_gpu_debs=""
+  while IFS= read -r driver_deb; do
+    driver_deb_name="${driver_deb##*/}"
+    if [[ "$driver_deb_name" =~ ^nvidia-dkms- \
+       || "$driver_deb_name" =~ ^linux-(image|headers)- \
+       || "$driver_deb_name" =~ ^linux-(main-modules|modules|objects|signatures)-.*-(azure|azure-fde|gcp|generic|ibm|nvidia|oracle)(_|-) ]]; then
+      unsafe_gpu_debs+="${unsafe_gpu_debs:+$'\n'}$driver_deb"
+    fi
+  done < <(find "$BUNDLE_DIR/payload/gpu/debs/nvidia-driver" -maxdepth 1 -type f -name '*.deb' -print)
+  if [[ -n "$unsafe_gpu_debs" ]]; then
+    echo "GPU driver payload contains DKMS or non-AWS kernel packages:" >&2
+    echo "$unsafe_gpu_debs" >&2
+    echo "Re-run scripts/internal/download-gpu-artifacts.sh to rebuild it." >&2
+    missing=1
+  fi
 else
   echo "Note: GPU artifacts not found (payload/gpu/DEVICE_PLUGIN_VERSION missing). Run download-gpu-artifacts.sh to include them." >&2
 fi

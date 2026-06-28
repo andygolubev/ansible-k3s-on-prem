@@ -284,7 +284,7 @@
       {{ driver_deb_files.files
          | map(attribute='path')
          | map('basename')
-         | select('match', '^(nvidia-dkms-|linux-image-|linux-headers-|linux-(modules|objects|signatures)-.*-(azure|azure-fde|gcp|generic|ibm|nvidia|oracle)(_|-))')
+         | select('match', '^(nvidia-dkms-|linux-image-|linux-headers-|linux-(main-modules|modules|objects|signatures)-.*-(azure|azure-fde|gcp|generic|ibm|nvidia|oracle)(_|-))')
          | list }}
   when: nvidia_driver_needs_install | bool
 
